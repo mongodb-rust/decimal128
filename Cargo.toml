@@ -1,0 +1,9 @@
+[package]
+name = "decimal128"
+version = "0.1.0"
+authors = ["lrlna <shestak.irina@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+failure = "0.1.2"
+byteorder = "1.2.1"
