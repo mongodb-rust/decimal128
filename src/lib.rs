@@ -27,9 +27,10 @@ impl Decimal128 {
 
         let mut rdr = Cursor::new(buffer);
         let byte = rdr.read_u8().unwrap();
+        let max = 0b11111111;
         // first bit is sign: negative or positive integer
         let is_negative_bitmask = 0b01111111;
-        let sign = (byte | is_negative_bitmask) == 0b11111111;
+        let sign = (byte | is_negative_bitmask) == max;
 
         // the next 5 bits of the first byte are combination field; these include:
         // Combination field	Type	Exponent MSBs	Coefficient MSD
@@ -44,62 +45,26 @@ impl Decimal128 {
         let combination_field = match res {
             0b11111111 => CombinationField::NaN,
             0b11111011 => CombinationField::Infinity,
-            _ => {
-                let exponent;
-                let coefficient;
-                let finite11_bitmask = 0b1001111;
-                match byte | finite11_bitmask {
-                    0b11111111 => {
-                        let first_bitmask = 0b11101111;
-                        let first = match byte | first_bitmask {
-                            0b11111111 => 1,
-                            _ => 0,
-                        };
-                        let second_bitmask = 0b11110111;
-                        let second = match byte | second_bitmask {
-                            0b11111111 => 1,
-                            _ => 0,
-                        };
-                        let last_coefficient_bitmask = 0b11111011;
-                        let last_coefficient = match byte | last_coefficient_bitmask {
-                            0b11111111 => 1,
-                            _ => 0,
-                        };
-                        exponent = Exponent(first, second);
-                        coefficient = Coefficient(1, 0, 0, last_coefficient);
-                    }
-                    _ => {
-                        let first_bitmask = 0b10111111;
-                        let first = match byte | first_bitmask {
-                            0b11111111 => 1,
-                            _ => 0,
-                        };
-                        let second_bitmask = 0b11011111;
-                        let second = match byte | second_bitmask {
-                            0b11111111 => 1,
-                            _ => 0,
-                        };
-                        let third_bitmask = 0b11101111;
-                        let third = match byte | third_bitmask {
-                            0b11111111 => 1,
-                            _ => 0,
-                        };
-                        let fourth_bitmask = 0b11110111;
-                        let fourth = match byte | fourth_bitmask {
-                            0b11111111 => 1,
-                            _ => 0,
-                        };
-                        let fifth_bitmask = 0b11111011;
-                        let fifth = match byte | fifth_bitmask {
-                            0b11111111 => 1,
-                            _ => 0,
-                        };
-                        exponent = Exponent(first, second);
-                        coefficient = Coefficient(0, third, fourth, fifth)
-                    }
-                };
-                CombinationField::Finite(exponent, coefficient)
-            }
+            _ => match byte | 0b1001111 {
+                0b11111111 => {
+                    let c = if (byte | 0b11101111) == max { 1 } else { 0 };
+                    let d = if (byte | 0b11110111) == max { 1 } else { 0 };
+                    let e = if (byte | 0b11111011) == max { 1 } else { 0 };
+                    let exp = Exponent(c, d);
+                    let coef = Coefficient(1, 0, 0, e);
+                    CombinationField::Finite(exp, coef)
+                }
+                _ => {
+                    let a = if (byte | 0b10111111) == max { 1 } else { 0 };
+                    let b = if (byte | 0b11011111) == max { 1 } else { 0 };
+                    let c = if (byte | 0b11101111) == max { 1 } else { 0 };
+                    let d = if (byte | 0b11110111) == max { 1 } else { 0 };
+                    let e = if (byte | 0b11111011) == max { 1 } else { 0 };
+                    let exp = Exponent(a, b);
+                    let coef = Coefficient(0, c, d, e);
+                    CombinationField::Finite(exp, coef)
+                }
+            },
         };
 
         let dec128 = match combination_field {
