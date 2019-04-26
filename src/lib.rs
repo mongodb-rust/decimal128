@@ -29,8 +29,7 @@ impl Decimal128 {
         // fill up the first two bits as zeros and then get its value
         let mut total_exp: BitVec = bitvec![BigEndian, u8; 0; 2];
 
-        let mut rdr = Cursor::new(buffer);
-        let byte = rdr.read_u8().unwrap();
+        let byte = buffer[0];
         let max = 0b11111111;
         // first bit is sign: negative or positive integer
         let is_negative_bitmask = 0b01111111;
@@ -44,8 +43,8 @@ impl Decimal128 {
         //     1 1 c d e	  Finite        c d	          1 0 0 e
         //     1 1 1 1 0	  Infinity	    - -	          - - - -
         //     1 1 1 1 1	  NaN           - -           - - - -
-        let combination_bitmask = 0b10000011;
-        let res = byte | combination_bitmask;
+        // the easiest bitmask to do is for NaN, i.e. five 1s
+        let res = byte | 0b10000011;
         let combination_field = match res {
             // if everything is 1s, we are looking at NaN
             0b11111111 => CombinationField::NaN,
@@ -80,8 +79,22 @@ impl Decimal128 {
             },
         };
 
-        let next_byte = rdr.read_u8().unwrap();
-        let bit_vec = unsafe { BitVec::from_raw_parts(next_byte, 8) };
+        // second byte of the buffer can just be straight up appended to the
+        // exponent for now
+        let byte_2 = buffer[1];
+        // second byte BitVector
+        let mut sb_bv: BitVec = (&[byte_2] as &[u8]).into();
+        total_exp.append(&mut sb_bv);
+
+        // out of the third byte we need the first 4 bits for the exponent and
+        // the rest go to coefficient calculation
+        let byte_3 = buffer[2];
+        let a = if (byte_3 | 0b01111111) == max { 1 } else { 0 };
+        let b = if (byte_3 | 0b10111111) == max { 1 } else { 0 };
+        let c = if (byte_3 | 0b11011111) == max { 1 } else { 0 };
+        let d = if (byte_3 | 0b11101111) == max { 1 } else { 0 };
+        let mut exp = bitvec![a, b, c, d];
+        total_exp.append(&mut exp);
 
         let dec128 = match combination_field {
             CombinationField::Finite(exp, coef) => Decimal128 {
