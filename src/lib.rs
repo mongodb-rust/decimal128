@@ -95,6 +95,21 @@ impl Decimal128 {
         let d = if (byte_3 | 0b11101111) == max { 1 } else { 0 };
         let mut exp = bitvec![a, b, c, d];
         total_exp.append(&mut exp);
+        let e = if (byte_3 | 0b11110111) == max { 1 } else { 0 };
+        let f = if (byte_3 | 0b11111011) == max { 1 } else { 0 };
+        let g = if (byte_3 | 0b11111101) == max { 1 } else { 0 };
+        let h = if (byte_3 | 0b11111110) == max { 1 } else { 0 };
+        // Start a new vec for 110bit coefficient. These will be appendd as a sufix
+        // to the coefficient gotten from combination field.
+        //
+        // We want to keep it separate for now as it's easier to parse it groups
+        // of 10.
+        let mut coef = bitvec![e, f, g, h];
+        // the rest of the bytes of the vec we are passed in.
+        for bytes in 3..buffer.len() {
+            let mut bv: BitVec = (&[buffer[bytes]] as &[u8]).into();
+            coef.append(&mut bv);
+        }
 
         let dec128 = match combination_field {
             CombinationField::Finite(exp, coef) => Decimal128 {
