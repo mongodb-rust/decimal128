@@ -58,9 +58,16 @@ impl Decimal128 {
                     let d = if (byte | 0b11110111) == max { 1 } else { 0 };
                     // e is the last of the coefficient MSD bits
                     let e = if (byte | 0b11111011) == max { 1 } else { 0 };
+                    // the last two bits of the first byte are exponent
+                    // continuation.
+                    let f = if (byte | 0b11111101) == max { 1 } else { 0 };
+                    let g = if (byte | 0b11111110) == max { 1 } else { 0 };
                     let mut exp = bitvec![c, d];
                     total_exp.append(&mut exp);
+                    let mut exp_cont = bitvec![f, g];
+                    total_exp.append(&mut exp_cont);
                     let coef = bitvec![1, 0, 0, e];
+                    // total_coef.append(&mut coef);
                     CombinationField::Finite(Exponent(exp), Coefficient(coef))
                 }
                 _ => {
@@ -71,9 +78,16 @@ impl Decimal128 {
                     let c = if (byte | 0b11101111) == max { 1 } else { 0 };
                     let d = if (byte | 0b11110111) == max { 1 } else { 0 };
                     let e = if (byte | 0b11111011) == max { 1 } else { 0 };
+                    // the last two bits of the first byte are exponent
+                    // continuation.
+                    let f = if (byte | 0b11111101) == max { 1 } else { 0 };
+                    let g = if (byte | 0b11111110) == max { 1 } else { 0 };
                     let mut exp = bitvec![a, b];
                     total_exp.append(&mut exp);
-                    let coef = bitvec![0, c, d, e];
+                    let mut exp_cont = bitvec![f, g];
+                    total_exp.append(&mut exp_cont);
+                    let mut coef = bitvec![0, c, d, e];
+                    // total_coef.append(&mut coef);
                     CombinationField::Finite(Exponent(exp), Coefficient(coef))
                 }
             },
@@ -91,10 +105,10 @@ impl Decimal128 {
         let byte_3 = buffer[2];
         let a = if (byte_3 | 0b01111111) == max { 1 } else { 0 };
         let b = if (byte_3 | 0b10111111) == max { 1 } else { 0 };
+        let mut exp = bitvec![a, b];
+        total_exp.append(&mut exp);
         let c = if (byte_3 | 0b11011111) == max { 1 } else { 0 };
         let d = if (byte_3 | 0b11101111) == max { 1 } else { 0 };
-        let mut exp = bitvec![a, b, c, d];
-        total_exp.append(&mut exp);
         let e = if (byte_3 | 0b11110111) == max { 1 } else { 0 };
         let f = if (byte_3 | 0b11111011) == max { 1 } else { 0 };
         let g = if (byte_3 | 0b11111101) == max { 1 } else { 0 };
@@ -104,11 +118,12 @@ impl Decimal128 {
         //
         // We want to keep it separate for now as it's easier to parse it groups
         // of 10.
-        let mut coef = bitvec![e, f, g, h];
+        let mut coef = bitvec![c, d, e, f, g, h];
+        total_coef.append(&mut coef);
         // the rest of the bytes of the vec we are passed in.
         for bytes in 3..buffer.len() {
             let mut bv: BitVec = (&[buffer[bytes]] as &[u8]).into();
-            coef.append(&mut bv);
+            total_coef.append(&mut bv);
         }
 
         let dec128 = match combination_field {
@@ -129,8 +144,10 @@ impl Decimal128 {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     #[test]
     fn it_works() {
-        assert_eq!(2 + 2, 4);
+        let vec = vec![9, 16, 3, 6, 7, 86, 76, 81, 89, 0, 3, 45, 12, 71, 52, 39];
+        Decimal128::from_raw_buf(&vec).unwrap();
     }
 }
