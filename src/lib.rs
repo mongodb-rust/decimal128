@@ -26,8 +26,10 @@ impl Decimal128 {
     pub fn from_raw_buf(buffer: &[u8]) -> Result<Decimal128, failure::Error> {
         ensure!(buffer.len() == 16, "buffer should be 16 bytes");
         // decimal 128's exponent is 14bits long; we will construct a u16 and
-        // fill up the first two bits as zeros and then get its value
+        // fill up the first two bits as zeros and then get its value.
         let mut total_exp: BitVec = bitvec![BigEndian, u8; 0; 2];
+        // start a bitvec for coefficient.
+        let mut total_coef = bitvec![];
 
         let byte = buffer[0];
         let max = 0b11111111;
