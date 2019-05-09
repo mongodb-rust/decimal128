@@ -2,8 +2,10 @@
 //! [1bits]  [   14bits   ]  [   113 bits   ]
 //!  sign       exponent        significand
 //!              field  
-use bitvec::*;
+use bitvec::{bitvec, BitVec, LittleEndian};
+use byteorder::*;
 use failure::ensure;
+use std::io::Cursor;
 
 #[derive(Debug, Clone)]
 pub struct Exponent {
@@ -171,10 +173,7 @@ impl Decimal128 {
     /// Converts Decimal128 to string. Uses information in
     /// [speleotrove](http://speleotrove.com/decimal/daconvs.html) decimal
     /// documentation.
-    pub fn to_string(&self) -> &str {
-        if let Some(exponent) = &self.exponent {
-            exponent.to_num();
-        }
+    pub fn to_string(&self) -> String {
         unimplemented!();
     }
 }
@@ -193,7 +192,8 @@ impl Exponent {
     }
 
     pub fn to_num(&self) -> u16 {
-        unimplemented!();
+        let mut reader = Cursor::new(&self.vec);
+        reader.read_u16::<byteorder::LittleEndian>().unwrap()
     }
 }
 
@@ -211,7 +211,8 @@ impl Significand {
     }
 
     pub fn to_num(&self) -> u128 {
-        unimplemented!();
+        let mut reader = Cursor::new(&self.vec);
+        reader.read_u128::<byteorder::LittleEndian>().unwrap()
     }
 }
 
