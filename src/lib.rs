@@ -6,9 +6,13 @@ use bitvec::*;
 use failure::ensure;
 
 #[derive(Debug, Clone)]
-pub struct Exponent(BitVec<LittleEndian>);
+pub struct Exponent {
+    vec: BitVec<LittleEndian>,
+}
 #[derive(Debug, Clone)]
-pub struct Significand(BitVec<LittleEndian>);
+pub struct Significand {
+    vec: BitVec<LittleEndian>,
+}
 
 pub struct Decimal128 {
     sign: bool,
@@ -41,11 +45,11 @@ impl Decimal128 {
         ensure!(buffer.len() == 16, "buffer should be 16 bytes");
         // decimal 128's exponent is 14bits long; we will construct a u16 and
         // fill up the first two bits as zeros and then get its value.
-        let mut total_exp = bitvec![LittleEndian, u8; 0; 2];
+        let mut total_exp = Exponent::new();
         // Significnad can be 113 *or* 111 bit long. Regardless of the size we
         // will pad it with 14 0s. We will be eventually constructing a u128
         // from this eventually.
-        let mut total_sig = bitvec![LittleEndian, u8; 0; 14];
+        let mut total_sig = Significand::new();
 
         let byte = buffer[0];
         let max = 0b11111111;
@@ -149,14 +153,11 @@ impl Decimal128 {
             total_sig.append(&mut bv);
         }
 
-        let exp = Exponent(total_exp);
-        let sig = Significand(total_sig);
-
         let dec128 = match combination_field {
             CombinationField::Finite => Decimal128 {
                 sign,
-                exponent: Some(exp),
-                significand: Some(sig),
+                exponent: Some(total_exp),
+                significand: Some(total_sig),
             },
             _ => Decimal128 {
                 sign,
@@ -171,6 +172,45 @@ impl Decimal128 {
     /// [speleotrove](http://speleotrove.com/decimal/daconvs.html) decimal
     /// documentation.
     pub fn to_string(&self) -> &str {
+        if let Some(exponent) = &self.exponent {
+            exponent.to_num();
+        }
+        unimplemented!();
+    }
+}
+
+/// Exponent is a 14-bit portion of decimal128 that follows the sign bit. Here we
+/// are storing it as a 16-bit BitVec that can be later converted to a u16.
+impl Exponent {
+    pub fn new() -> Self {
+        Exponent {
+            vec: bitvec![LittleEndian, u8; 0; 2],
+        }
+    }
+
+    pub fn append(&mut self, vec: &mut BitVec) {
+        self.vec.append(vec)
+    }
+
+    pub fn to_num(&self) -> u16 {
+        unimplemented!();
+    }
+}
+
+/// Significand is a padded 111- or 113-bit coefficient. We are storing it as a
+/// 128-bit BitVec with the padded difference. This can be converted to a u128.
+impl Significand {
+    pub fn new() -> Self {
+        Significand {
+            vec: bitvec![LittleEndian, u8; 0; 14],
+        }
+    }
+
+    pub fn append(&mut self, vec: &mut BitVec) {
+        self.vec.append(vec)
+    }
+
+    pub fn to_num(&self) -> u128 {
         unimplemented!();
     }
 }
