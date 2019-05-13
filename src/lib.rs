@@ -7,11 +7,11 @@ use byteorder::*;
 use failure::ensure;
 use std::io::Cursor;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialOrd)]
 pub struct Exponent {
     vec: BitVec<LittleEndian>,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialOrd)]
 pub struct Significand {
     vec: BitVec<LittleEndian>,
 }
@@ -173,8 +173,21 @@ impl Decimal128 {
     /// Converts Decimal128 to string. Uses information in
     /// [speleotrove](http://speleotrove.com/decimal/daconvs.html) decimal
     /// documentation.
-    pub fn to_string(&self) -> String {
-        unimplemented!();
+    pub fn to_string(&self) -> Option<String> {
+        if self.exponent?.to_adjusted_exponent() > 0 {
+            if self.significand?.to_num() > exponent
+        }
+        unimplemented!()
+    }
+
+    pub fn use_scientific_notation(&self) -> bool {
+        self.exponent?.to_adjusted_exponent() > 0 || scientific_exponent < -6
+    }
+
+    // TODO: check if we can just return a number here
+    // TODO: match up number types with significand and exponenet
+    pub fn scientific_exponent(&self) -> Option<u128> {
+        (self.significand?.to_num().len() - 1) + self.exponent?.to_adjusted_exponent()
     }
 }
 
@@ -194,6 +207,13 @@ impl Exponent {
     pub fn to_num(&self) -> u16 {
         let mut reader = Cursor::new(&self.vec);
         reader.read_u16::<byteorder::LittleEndian>().unwrap()
+    }
+
+    // compare current exponent value with exponent bias (largest possible
+    // exponent value)
+    // TODO: check if 6176 (exponent bias) can be stored as u16
+    pub fn to_adjusted_exponent(&self) -> u16 {
+        &self.to_num() - 6176
     }
 }
 
