@@ -186,21 +186,52 @@ impl Decimal128 {
     /// Converts Decimal128 to string. Uses information in
     /// [speleotrove](http://speleotrove.com/decimal/daconvs.html) decimal
     /// documentation.
-    pub fn to_string(&self) -> Option<String> {
-        if self.exponent?.to_adjusted_exponent() > 0 {
-            if self.significand?.to_num() > exponent
-        }
-        unimplemented!()
+    pub fn to_string(&self) -> String {
+        // just return NaN if we are dealing with NaN. This does not come with a
+        // sign.
+        if self.nan {
+            return String::from("NaN");
+        };
+
+        // Everything else can have a sign. We can create a string from Infinity
+        // or a Finite number.
+        let str = if self.inf {
+            "Infinity".to_string()
+        } else {
+            self.create_string()
+        };
+
+        // add a sign if this is a negative number
+        return if self.sign { str } else { format!("-{}", str) };
     }
 
-    pub fn use_scientific_notation(&self) -> bool {
-        self.exponent?.to_adjusted_exponent() > 0 || scientific_exponent < -6
+    fn create_string(&self) -> String {
+        if self.use_scientific_notation() {
+            let exp_sign = if self.exponent.to_adjusted_exponent() > 0 {
+                ""
+            } else {
+                "+"
+            };
+
+            if self.significand.count_digits() > 1 {
+                return "scientific_string".to_string();
+            }
+            return "not scientific string".to_string();
+        } else {
+            unimplemented!();
+        }
+    }
+
+    fn use_scientific_notation(&self) -> bool {
+        (self.exponent.to_adjusted_exponent() as i16) > 0
+            || (self.scientific_exponent() as i16) < -6
     }
 
     // TODO: check if we can just return a number here
     // TODO: match up number types with significand and exponenet
-    pub fn scientific_exponent(&self) -> Option<u128> {
-        (self.significand?.to_num().len() - 1) + self.exponent?.to_adjusted_exponent()
+    fn scientific_exponent(&self) -> u16 {
+        // first variable is number of digits in a significand
+        (self.significand.count_digits() - 1) + self.exponent.to_adjusted_exponent()
     }
 }
 
@@ -226,7 +257,7 @@ impl Exponent {
     // exponent value)
     // TODO: check if 6176 (exponent bias) can be stored as u16
     pub fn to_adjusted_exponent(&self) -> u16 {
-        &self.to_num() - 6176
+        self.to_num() - 6176
     }
 }
 
@@ -246,6 +277,22 @@ impl Significand {
     pub fn to_num(&self) -> u128 {
         let mut reader = Cursor::new(&self.vec);
         reader.read_u128::<byteorder::LittleEndian>().unwrap()
+    }
+
+    // count the number of digits in the significand. This method first converts
+    // significand BitVec into a u128 number, then converts it to string to
+    // count characters and collects them in a vec to look at the vec's length.
+    //
+    // We return a u16 number of digits, as it's easier to compare to the
+    // exponent since that's also stored as a u16.
+    fn count_digits(&self) -> u16 {
+        let digits: Vec<u32> = self
+            .to_num()
+            .to_string()
+            .chars()
+            .map(|c| c.to_digit(10).unwrap())
+            .collect();
+        digits.len() as u16
     }
 }
 
