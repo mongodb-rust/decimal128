@@ -7,22 +7,24 @@ use byteorder::*;
 use failure::ensure;
 use std::io::Cursor;
 
-#[derive(Debug, Clone, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct Exponent {
     vec: BitVec<LittleEndian>,
 }
-#[derive(Debug, Clone, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct Significand {
     vec: BitVec<LittleEndian>,
 }
 
 pub struct Decimal128 {
-    sign: bool,
-    exponent: Option<Exponent>,
-    significand: Option<Significand>,
+    pub sign: bool,
+    pub exponent: Exponent,
+    pub significand: Significand,
+    nan: bool,
+    inf: bool,
 }
 
-pub enum CombinationField {
+pub enum NumberType {
     NaN,
     Infinity,
     Finite,
@@ -70,9 +72,9 @@ impl Decimal128 {
         let res = byte | 0b1000_0011;
         let combination_field = match res {
             // if everything is 1s, we are looking at NaN
-            0b1111_1111 => CombinationField::NaN,
+            0b1111_1111 => NumberType::NaN,
             // if the last of the five bits is a 0, we are looking at Infinity
-            0b1111_1011 => CombinationField::Infinity,
+            0b1111_1011 => NumberType::Infinity,
             // match for finite cases
             _ => match byte | 0b1001_1111 {
                 0b1111_1111 => {
@@ -108,7 +110,7 @@ impl Decimal128 {
                     // `100`
                     let mut sig = bitvec![1, 0, 0, i, j, k, l, m, n, o];
                     total_sig.append(&mut sig);
-                    CombinationField::Finite
+                    NumberType::Finite
                 }
                 _ => {
                     // if the first two bits after the sign are `00`, `01`,
@@ -144,7 +146,7 @@ impl Decimal128 {
                     let byte_3 = buffer[2];
                     let mut tb_bv: BitVec = (&[byte_3] as &[u8]).into();
                     total_sig.append(&mut tb_bv);
-                    CombinationField::Finite
+                    NumberType::Finite
                 }
             },
         };
@@ -156,15 +158,26 @@ impl Decimal128 {
         }
 
         let dec128 = match combination_field {
-            CombinationField::Finite => Decimal128 {
+            NumberType::Finite => Decimal128 {
                 sign,
-                exponent: Some(total_exp),
-                significand: Some(total_sig),
+                exponent: total_exp,
+                significand: total_sig,
+                nan: false,
+                inf: false,
             },
-            _ => Decimal128 {
+            NumberType::NaN => Decimal128 {
                 sign,
-                exponent: None,
-                significand: None,
+                exponent: total_exp,
+                significand: total_sig,
+                nan: true,
+                inf: false,
+            },
+            NumberType::Infinity => Decimal128 {
+                sign,
+                exponent: total_exp,
+                significand: total_sig,
+                nan: false,
+                inf: true,
             },
         };
         Ok(dec128)
