@@ -2,18 +2,19 @@
 //! [1bits]  [   14bits   ]  [   113 bits   ]
 //!  sign       exponent        significand
 //!              field  
-use bitvec::{bitvec, BitVec, LittleEndian};
+use bitvec::{bitvec, BigEndian, BitVec};
 use byteorder::*;
 use failure::ensure;
+use hex::*;
 use std::io::Cursor;
 
 #[derive(Debug, Clone)]
 pub struct Exponent {
-    vec: BitVec<LittleEndian>,
+    vec: BitVec<BigEndian>,
 }
 #[derive(Debug, Clone)]
 pub struct Significand {
-    vec: BitVec<LittleEndian>,
+    vec: BitVec<BigEndian>,
 }
 
 pub struct Decimal128 {
@@ -42,10 +43,10 @@ impl Decimal128 {
     /// ```
     /// use decimal128::*;
     ///
-    /// let vec = vec![9, 16, 3, 6, 7, 86, 76, 81, 89, 0, 3, 45, 12, 71, 52, 39];
-    /// let dec128 = Decimal128::from_raw_buf(&vec).unwrap();
+    /// let vec: [u8; 16] = [9, 16, 3, 6, 7, 86, 76, 81, 89, 0, 3, 45, 12, 71, 52, 39];
+    /// let dec128 = Decimal128::from_raw_buf(vec).unwrap();
     /// ```
-    pub fn from_raw_buf(buffer: &[u8]) -> Result<Self, failure::Error> {
+    pub fn from_raw_buf(buffer: [u8; 16]) -> Result<Self, failure::Error> {
         ensure!(buffer.len() == 16, "buffer should be 16 bytes");
         // decimal 128's exponent is 14bits long; we will construct a u16 and
         // fill up the first two bits as zeros and then get its value.
@@ -206,32 +207,80 @@ impl Decimal128 {
     }
 
     fn create_string(&self) -> String {
+        println!("significand {:?}", self.significand.to_num());
+        println!("exponent {:?}", self.exponent.to_num());
         if self.use_scientific_notation() {
-            let exp_sign = if self.exponent.to_adjusted_exponent() > 0 {
+            let exp_sign = if self.exponent.to_adjusted() < 0 {
                 ""
             } else {
                 "+"
             };
 
-            if self.significand.count_digits() > 1 {
-                return "scientific_string".to_string();
+            if self.significand.as_digit_vec().len() > 1 {
+                let mut first_significand = self.significand.as_digit_vec().clone();
+                let remainder = first_significand.split_off(1);
+                let remainder_significand = remainder
+                    .into_iter()
+                    .map(|d| d.to_string())
+                    .collect::<Vec<String>>()
+                    .join("");
+                return format!(
+                    "{first_significand}.{remainder_significand}E{exp_sign}{scientific_exponent}",
+                    first_significand = first_significand[0],
+                    remainder_significand = remainder_significand,
+                    exp_sign = exp_sign,
+                    scientific_exponent = self.scientific_exponent()
+                );
+            } else {
+                return format!(
+                    "{significand}E{exp_sign}{scientific_exponent}",
+                    significand = self.significand.to_num(),
+                    exp_sign = exp_sign,
+                    scientific_exponent = self.scientific_exponent()
+                );
             }
-            return "not scientific string".to_string();
-        } else {
-            unimplemented!();
+        } else if self.exponent.to_adjusted() < 0 {
+            if self.significand.count_digits() > self.exponent.to_adjusted().abs() {
+                let decimal_point_index =
+                    self.significand.count_digits() - self.exponent.to_adjusted().abs();
+                let mut first_significand = self.significand.as_digit_vec().clone();
+                let remainder = first_significand.split_off(decimal_point_index as usize - 1);
+                let remainder_significand = remainder
+                    .into_iter()
+                    .map(|d| d.to_string())
+                    .collect::<Vec<String>>()
+                    .join("");
+                return format!(
+                    "{first_significand}.{remainder_significand}",
+                    first_significand = first_significand[0],
+                    remainder_significand = remainder_significand
+                );
+            } else {
+                let left_zero_pad_count =
+                    (self.exponent.to_adjusted() + self.significand.count_digits()).abs();
+                let zero_pad = std::iter::repeat("0")
+                    .take(left_zero_pad_count as usize)
+                    .collect::<String>();
+                return format!(
+                    "0.{zero_pad}{significand}",
+                    zero_pad = zero_pad,
+                    significand = self.significand.to_num()
+                );
+            }
         }
+        format!("{}", self.significand.to_num())
     }
 
     fn use_scientific_notation(&self) -> bool {
-        (self.exponent.to_adjusted_exponent() as i16) > 0
-            || (self.scientific_exponent() as i16) < -6
+        println!("scientific exponent {:?}", self.scientific_exponent());
+        (self.exponent.to_adjusted() as i16) > 0 || (self.scientific_exponent() as i16) < -6
     }
 
     // TODO: check if we can just return a number here
     // TODO: match up number types with significand and exponenet
-    fn scientific_exponent(&self) -> u16 {
+    fn scientific_exponent(&self) -> i16 {
         // first variable is number of digits in a significand
-        (self.significand.count_digits() - 1) + self.exponent.to_adjusted_exponent()
+        (self.significand.count_digits() - 1) + self.exponent.to_adjusted()
     }
 }
 
@@ -240,7 +289,7 @@ impl Decimal128 {
 impl Exponent {
     pub fn new() -> Self {
         Exponent {
-            vec: bitvec![LittleEndian, u8; 0; 2],
+            vec: bitvec![BigEndian, u8; 0; 2],
         }
     }
 
@@ -256,8 +305,8 @@ impl Exponent {
     // compare current exponent value with exponent bias (largest possible
     // exponent value)
     // TODO: check if 6176 (exponent bias) can be stored as u16
-    pub fn to_adjusted_exponent(&self) -> u16 {
-        self.to_num() - 6176
+    pub fn to_adjusted(&self) -> i16 {
+        self.to_num() as i16 - 6176 as i16
     }
 }
 
@@ -266,7 +315,7 @@ impl Exponent {
 impl Significand {
     pub fn new() -> Self {
         Significand {
-            vec: bitvec![LittleEndian, u8; 0; 14],
+            vec: bitvec![BigEndian, u8; 0; 14],
         }
     }
 
@@ -276,7 +325,7 @@ impl Significand {
 
     pub fn to_num(&self) -> u128 {
         let mut reader = Cursor::new(&self.vec);
-        reader.read_u128::<byteorder::LittleEndian>().unwrap()
+        reader.read_u128::<byteorder::BigEndian>().unwrap()
     }
 
     // count the number of digits in the significand. This method first converts
@@ -285,14 +334,18 @@ impl Significand {
     //
     // We return a u16 number of digits, as it's easier to compare to the
     // exponent since that's also stored as a u16.
-    fn count_digits(&self) -> u16 {
+    fn count_digits(&self) -> i16 {
+        self.as_digit_vec().len() as i16
+    }
+
+    fn as_digit_vec(&self) -> Vec<u32> {
         let digits: Vec<u32> = self
             .to_num()
             .to_string()
             .chars()
             .map(|c| c.to_digit(10).unwrap())
             .collect();
-        digits.len() as u16
+        return digits;
     }
 }
 
@@ -300,9 +353,46 @@ impl Significand {
 mod tests {
     use super::*;
     #[test]
-    fn it_works() {
-        let vec = vec![9, 16, 3, 6, 7, 86, 76, 81, 89, 0, 3, 45, 12, 71, 52, 39];
-        let dec128 = Decimal128::from_raw_buf(&vec).unwrap();
-        dec128.to_string();
+    fn it_returns_positive_infinity() {
+        let vec: [u8; 16] = [
+            0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let string = dec128.to_string();
+        println!("{}", string);
+    }
+    #[test]
+    fn it_returns_negative_infinity() {
+        let vec: [u8; 16] = [
+            0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let string = dec128.to_string();
+        println!("{}", string);
+    }
+
+    #[test]
+    fn it_returns_nan() {
+        let vec: [u8; 16] = [
+            0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let string = dec128.to_string();
+        println!("{}", string);
+    }
+
+    #[test]
+    fn it_returns_decimal() {
+        let mut vec: [u8; 16] = [
+            0x30, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x04, 0xd2,
+        ];
+        vec.reverse();
+        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let decimal = dec128.to_string();
+        assert_eq!("0.001234".to_string(), decimal);
     }
 }
