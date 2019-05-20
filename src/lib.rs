@@ -203,12 +203,13 @@ impl Decimal128 {
         };
 
         // add a sign if this is a negative number
-        return if self.sign { str } else { format!("-{}", str) };
+        return if !self.sign { str } else { format!("-{}", str) };
     }
 
     fn create_string(&self) -> String {
         println!("significand {:?}", self.significand.to_num());
         println!("exponent {:?}", self.exponent.to_num());
+        println!("adjusted exponent {:?}", self.exponent.to_adjusted());
         if self.use_scientific_notation() {
             let exp_sign = if self.exponent.to_adjusted() < 0 {
                 ""
@@ -272,7 +273,6 @@ impl Decimal128 {
     }
 
     fn use_scientific_notation(&self) -> bool {
-        println!("scientific exponent {:?}", self.scientific_exponent());
         (self.exponent.to_adjusted() as i16) > 0 || (self.scientific_exponent() as i16) < -6
     }
 
@@ -299,7 +299,7 @@ impl Exponent {
 
     pub fn to_num(&self) -> u16 {
         let mut reader = Cursor::new(&self.vec);
-        reader.read_u16::<byteorder::LittleEndian>().unwrap()
+        reader.read_u16::<byteorder::BigEndian>().unwrap()
     }
 
     // compare current exponent value with exponent bias (largest possible
@@ -353,24 +353,24 @@ impl Significand {
 mod tests {
     use super::*;
     #[test]
-    fn it_returns_positive_infinity() {
+    fn it_returns_negative_infinity() {
         let vec: [u8; 16] = [
             0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00,
         ];
         let dec128 = Decimal128::from_raw_buf(vec).unwrap();
         let string = dec128.to_string();
-        println!("{}", string);
+        assert_eq!("-Infinity".to_string(), string);
     }
     #[test]
-    fn it_returns_negative_infinity() {
+    fn it_returns_positive_infinity() {
         let vec: [u8; 16] = [
             0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00,
         ];
         let dec128 = Decimal128::from_raw_buf(vec).unwrap();
         let string = dec128.to_string();
-        println!("{}", string);
+        assert_eq!("Infinity".to_string(), string);
     }
 
     #[test]
@@ -381,18 +381,75 @@ mod tests {
         ];
         let dec128 = Decimal128::from_raw_buf(vec).unwrap();
         let string = dec128.to_string();
-        println!("{}", string);
+        assert_eq!("NaN".to_string(), string);
     }
 
     #[test]
-    fn it_returns_decimal() {
+    fn it_returns_0_001234() {
         let mut vec: [u8; 16] = [
             0x30, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x04, 0xd2,
         ];
-        vec.reverse();
         let dec128 = Decimal128::from_raw_buf(vec).unwrap();
         let decimal = dec128.to_string();
         assert_eq!("0.001234".to_string(), decimal);
+    }
+
+    #[test]
+    fn it_returns_123456789012() {
+        let vec: [u8; 16] = [
+            0x30, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1c, 0xbe, 0x99,
+            0x1a, 0x14,
+        ];
+        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let decimal = dec128.to_string();
+        assert_eq!("123456789012".to_string(), decimal)
+    }
+
+    #[test]
+    fn it_returns_0_00123400000() {
+        let vec: [u8; 16] = [
+            0x30, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x5a,
+            0xef, 0x40,
+        ];
+        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let decimal = dec128.to_string();
+        assert_eq!("0.00123400000".to_string(), decimal)
+    }
+
+    #[test]
+    fn it_returns_0_1234567890123456789012345678901234() {
+        let vec: [u8; 16] = [
+            0x2f, 0xfc, 0x3c, 0xde, 0x6f, 0xff, 0x97, 0x32, 0xde, 0x82, 0x5c, 0xd0, 0x7e, 0x96,
+            0xaf, 0xf2,
+        ];
+        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let decimal = dec128.to_string();
+        assert_eq!("0.1234567890123456789012345678901234".to_string(), decimal)
+    }
+
+    #[test]
+    fn it_returns_1_000000000000000000000000000000000E_6144() {
+        let vec: [u8; 16] = [
+            0x5f, 0xfe, 0x31, 0x4d, 0xc6, 0x44, 0x8d, 0x93, 0x38, 0xc1, 0x5b, 0x0a, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let decimal = dec128.to_string();
+        assert_eq!(
+            "1.000000000000000000000000000000000E+6144".to_string(),
+            decimal
+        )
+    }
+
+    #[test]
+    fn it_returns_1E_6176() {
+        let vec: [u8; 16] = [
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01,
+        ];
+        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let decimal = dec128.to_string();
+        assert_eq!("1E-6176".to_string(), decimal)
     }
 }
