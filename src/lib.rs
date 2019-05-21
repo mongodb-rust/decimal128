@@ -5,7 +5,6 @@
 use bitvec::{bitvec, BigEndian, BitVec};
 use byteorder::*;
 use failure::ensure;
-use hex::*;
 use std::io::Cursor;
 
 #[derive(Debug, Clone)]
@@ -386,7 +385,7 @@ mod tests {
 
     #[test]
     fn it_returns_0_001234() {
-        let mut vec: [u8; 16] = [
+        let vec: [u8; 16] = [
             0x30, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x04, 0xd2,
         ];
@@ -429,7 +428,7 @@ mod tests {
     }
 
     #[test]
-    fn it_returns_1_000000000000000000000000000000000E_6144() {
+    fn it_returns_1_000000000000000000000000000000000_e_6144() {
         let vec: [u8; 16] = [
             0x5f, 0xfe, 0x31, 0x4d, 0xc6, 0x44, 0x8d, 0x93, 0x38, 0xc1, 0x5b, 0x0a, 0x00, 0x00,
             0x00, 0x00,
@@ -443,7 +442,7 @@ mod tests {
     }
 
     #[test]
-    fn it_returns_1E_6176() {
+    fn it_returns_1_e_6176() {
         let vec: [u8; 16] = [
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x01,
