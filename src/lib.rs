@@ -206,9 +206,6 @@ impl Decimal128 {
     }
 
     fn create_string(&self) -> String {
-        println!("significand {:?}", self.significand.to_num());
-        println!("exponent {:?}", self.exponent.to_num());
-        println!("adjusted exponent {:?}", self.exponent.to_adjusted());
         if self.use_scientific_notation() {
             let exp_sign = if self.exponent.to_adjusted() < 0 {
                 ""
@@ -218,12 +215,9 @@ impl Decimal128 {
 
             if self.significand.as_digit_vec().len() > 1 {
                 let mut first_significand = self.significand.as_digit_vec().clone();
-                let remainder = first_significand.split_off(1);
-                let remainder_significand = remainder
-                    .into_iter()
-                    .map(|d| d.to_string())
-                    .collect::<Vec<String>>()
-                    .join("");
+                // we already used the first digit, so only stringify the
+                // remainder of the significand
+                let remainder_significand = stringify_vec(first_significand.split_off(1));
                 return format!(
                     "{first_significand}.{remainder_significand}E{exp_sign}{scientific_exponent}",
                     first_significand = first_significand[0],
@@ -241,26 +235,16 @@ impl Decimal128 {
             }
         } else if self.exponent.to_adjusted() < 0 {
             if self.significand.count_digits() > self.exponent.to_adjusted().abs() {
-                let decimal_point_index =
-                    self.significand.count_digits() - self.exponent.to_adjusted().abs();
-                let mut first_significand = self.significand.as_digit_vec().clone();
-                let remainder = first_significand.split_off(decimal_point_index as usize - 1);
-                let remainder_significand = remainder
-                    .into_iter()
-                    .map(|d| d.to_string())
-                    .collect::<Vec<String>>()
-                    .join("");
+                let dec_point = self.get_decimal_point_index() as usize;
+                let mut significand_vec = self.significand.as_digit_vec().clone();
+                let remainder_significand = stringify_vec(significand_vec.split_off(dec_point - 1));
                 return format!(
                     "{first_significand}.{remainder_significand}",
-                    first_significand = first_significand[0],
+                    first_significand = significand_vec[0],
                     remainder_significand = remainder_significand
                 );
             } else {
-                let left_zero_pad_count =
-                    (self.exponent.to_adjusted() + self.significand.count_digits()).abs();
-                let zero_pad = std::iter::repeat("0")
-                    .take(left_zero_pad_count as usize)
-                    .collect::<String>();
+                let zero_pad = self.get_zero_padding();
                 return format!(
                     "0.{zero_pad}{significand}",
                     zero_pad = zero_pad,
@@ -275,11 +259,23 @@ impl Decimal128 {
         (self.exponent.to_adjusted() as i16) > 0 || (self.scientific_exponent() as i16) < -6
     }
 
-    // TODO: check if we can just return a number here
-    // TODO: match up number types with significand and exponenet
     fn scientific_exponent(&self) -> i16 {
         // first variable is number of digits in a significand
         (self.significand.count_digits() - 1) + self.exponent.to_adjusted()
+    }
+
+    // for larger numbers we want to know where to put the decimal point.
+    fn get_decimal_point_index(&self) -> i16 {
+        self.significand.count_digits() - self.exponent.to_adjusted().abs()
+    }
+
+    // for very small decimals, we need to know how many zeroes to pad it with.
+    fn get_zero_padding(&self) -> String {
+        let left_zero_pad_count =
+            (self.exponent.to_adjusted() + self.significand.count_digits()).abs();
+        std::iter::repeat("0")
+            .take(left_zero_pad_count as usize)
+            .collect::<String>()
     }
 }
 
@@ -346,6 +342,13 @@ impl Significand {
             .collect();
         return digits;
     }
+}
+
+fn stringify_vec(vec: Vec<u32>) -> String {
+    vec.into_iter()
+        .map(|d| d.to_string())
+        .collect::<Vec<String>>()
+        .join("")
 }
 
 #[cfg(test)]
