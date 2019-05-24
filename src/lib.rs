@@ -4,18 +4,20 @@
 //!              field  
 use bitvec::{bitvec, BigEndian, BitVec};
 use byteorder::*;
-use failure::ensure;
+use std::cmp::Ordering;
+use std::fmt;
 use std::io::Cursor;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, PartialEq, PartialOrd)]
 pub struct Exponent {
     vec: BitVec<BigEndian>,
 }
-#[derive(Debug, Clone)]
+#[derive(Clone, PartialEq, PartialOrd)]
 pub struct Significand {
     vec: BitVec<BigEndian>,
 }
 
+#[derive(Clone)]
 pub struct Decimal128 {
     pub sign: bool,
     pub exponent: Exponent,
@@ -31,8 +33,7 @@ pub enum NumberType {
 }
 
 impl Decimal128 {
-    /// Create a Decimal128 from a &[u8; 16]. Will panic if the vector used is
-    /// the wrong length.
+    /// Create a Decimal128 from a [u8; 16].
     ///
     /// This method extracts out the sign, exponent and signficand, uses Binary
     /// Integer Decimal decoding. The byte order is LittleEndian. For more
@@ -45,8 +46,7 @@ impl Decimal128 {
     /// let vec: [u8; 16] = [9, 16, 3, 6, 7, 86, 76, 81, 89, 0, 3, 45, 12, 71, 52, 39];
     /// let dec128 = Decimal128::from_raw_buf(vec).unwrap();
     /// ```
-    pub fn from_raw_buf(buffer: [u8; 16]) -> Result<Self, failure::Error> {
-        ensure!(buffer.len() == 16, "buffer should be 16 bytes");
+    pub fn from_raw_buf(buffer: [u8; 16]) -> Self {
         // decimal 128's exponent is 14bits long; we will construct a u16 and
         // fill up the first two bits as zeros and then get its value.
         let mut total_exp = Exponent::new();
@@ -180,7 +180,27 @@ impl Decimal128 {
                 inf: true,
             },
         };
-        Ok(dec128)
+        dec128
+    }
+
+    pub fn is_nan(&self) -> bool {
+        if self.nan {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    pub fn is_negative(&self) -> bool {
+        if self.sign {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    pub fn is_positive(&self) -> bool {
+        return !self.is_negative();
     }
 
     /// Converts Decimal128 to string. Uses information in
@@ -277,6 +297,120 @@ impl Decimal128 {
             .take(left_zero_pad_count as usize)
             .collect::<String>()
     }
+
+    /// create a compare functiont that returns a decimal 128 that's either:
+    /// * -1 = less than
+    /// * 0 = equal
+    /// * 1 = greater than
+    /// When comparing and orderign Decimal128, we should end up with:
+    /// (-) NaN | -Infinity | x < 0 | -0 | +0 | x > 0 | +Infinity | (+) NaN
+    ///
+    /// Even though NaN can't be negative or positive, when reading the sign bit,
+    /// (-) NaN < (+) NaN
+    //
+    // TODO: once we have a method to create Decimal128 from another number type
+    // (u32/i32/u128/i128), change this return type to be a Decimal128 as well.
+    pub fn compare(&self, other: &Decimal128) -> isize {
+        let self_exp = self.exponent.to_adjusted();
+        let other_exp = other.exponent.to_adjusted();
+        let self_signif = self.significand.to_num();
+        let other_signif = other.significand.to_num();
+
+        // NaN and Infinity will be ordered via the sign Check
+        if self.sign > other.sign {
+            -1
+        } else if self.sign < other.sign {
+            1
+        } else {
+            // since 1x10^3 is the same number as 10x10^2, we want to try to
+            // even out the exponents before comparing significands.
+            let exp_dif = (self_exp - other_exp).abs();
+            // however, if the difference is greeater than 66, they are
+            // definitely diffferent numbers. so we only try to mingle with
+            // exponents if the difference is less than 66.
+            if exp_dif <= 66 {
+                if self_exp < other_exp {
+                    Decimal128::increase_exponent(self_signif, self_exp, other_exp);
+                    Decimal128::decrease_exponent(other_signif, other_exp, self_exp);
+                } else if self_exp > other_exp {
+                    Decimal128::decrease_exponent(self_signif, self_exp, other_exp);
+                    Decimal128::increase_exponent(other_signif, other_exp, self_exp);
+                }
+            }
+            if self_exp == other_exp {
+                if self_signif > other_signif {
+                    1
+                } else if self_signif < other_signif {
+                    -1
+                } else {
+                    0
+                }
+            } else {
+                if self_exp > other_exp {
+                    1
+                } else if self_exp < other_exp {
+                    -1
+                } else {
+                    0
+                }
+            }
+        }
+    }
+
+    // This is part of the effort to compare two different Decimal128 numbers.
+    fn increase_exponent(mut significand: u128, mut exponent: i16, goal: i16) {
+        if significand == 0 as u128 {
+            exponent = goal
+        }
+
+        while exponent < goal {
+            let significand_divided_by_10 = significand / 10;
+            if significand % 10 != 0 {
+                break;
+            }
+            exponent += 1;
+            significand = significand_divided_by_10
+        }
+    }
+
+    // This is part of the effort to compare two different Decimal128 numbers.
+    fn decrease_exponent(mut significand: u128, mut exponent: i16, goal: i16) {
+        if significand == 0 as u128 {
+            exponent = goal
+        }
+
+        while exponent > goal {
+            let significand_times_10 = significand * 10;
+            if significand_times_10 - Significand::max_value() > 0 {
+                break;
+            }
+            exponent -= 1;
+            significand = significand_times_10
+        }
+    }
+}
+
+impl fmt::Display for Decimal128 {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "{}", self.to_string())
+    }
+}
+
+impl PartialOrd<Decimal128> for Decimal128 {
+    fn partial_cmp(&self, other: &Decimal128) -> Option<Ordering> {
+        match self.compare(other) {
+            v if v == 0 => Some(Ordering::Equal),
+            v if v > 0 => Some(Ordering::Greater),
+            v if v < 0 => Some(Ordering::Less),
+            _ => None,
+        }
+    }
+}
+
+impl PartialEq<Decimal128> for Decimal128 {
+    fn eq(&self, other: &Decimal128) -> bool {
+        self.compare(other) == 0
+    }
 }
 
 /// Exponent is a 14-bit portion of decimal128 that follows the sign bit. Here we
@@ -323,6 +457,10 @@ impl Significand {
         reader.read_u128::<byteorder::BigEndian>().unwrap()
     }
 
+    pub fn max_value() -> u128 {
+        u128::from_str_radix("9999999999999999999999999999999999", 10).unwrap()
+    }
+
     // count the number of digits in the significand. This method first converts
     // significand BitVec into a u128 number, then converts it to string to
     // count characters and collects them in a vec to look at the vec's length.
@@ -360,7 +498,7 @@ mod tests {
             0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let dec128 = Decimal128::from_raw_buf(vec);
         let string = dec128.to_string();
         assert_eq!("-Infinity".to_string(), string);
     }
@@ -370,7 +508,7 @@ mod tests {
             0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let dec128 = Decimal128::from_raw_buf(vec);
         let string = dec128.to_string();
         assert_eq!("Infinity".to_string(), string);
     }
@@ -381,7 +519,7 @@ mod tests {
             0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let dec128 = Decimal128::from_raw_buf(vec);
         let string = dec128.to_string();
         assert_eq!("NaN".to_string(), string);
     }
@@ -392,7 +530,7 @@ mod tests {
             0x30, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x04, 0xd2,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let dec128 = Decimal128::from_raw_buf(vec);
         let decimal = dec128.to_string();
         assert_eq!("0.001234".to_string(), decimal);
     }
@@ -403,7 +541,7 @@ mod tests {
             0x30, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1c, 0xbe, 0x99,
             0x1a, 0x14,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let dec128 = Decimal128::from_raw_buf(vec);
         let decimal = dec128.to_string();
         assert_eq!("123456789012".to_string(), decimal)
     }
@@ -414,7 +552,7 @@ mod tests {
             0x30, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x5a,
             0xef, 0x40,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let dec128 = Decimal128::from_raw_buf(vec);
         let decimal = dec128.to_string();
         assert_eq!("0.00123400000".to_string(), decimal)
     }
@@ -425,7 +563,7 @@ mod tests {
             0x2f, 0xfc, 0x3c, 0xde, 0x6f, 0xff, 0x97, 0x32, 0xde, 0x82, 0x5c, 0xd0, 0x7e, 0x96,
             0xaf, 0xf2,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let dec128 = Decimal128::from_raw_buf(vec);
         let decimal = dec128.to_string();
         assert_eq!("0.1234567890123456789012345678901234".to_string(), decimal)
     }
@@ -436,7 +574,7 @@ mod tests {
             0x5f, 0xfe, 0x31, 0x4d, 0xc6, 0x44, 0x8d, 0x93, 0x38, 0xc1, 0x5b, 0x0a, 0x00, 0x00,
             0x00, 0x00,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let dec128 = Decimal128::from_raw_buf(vec);
         let decimal = dec128.to_string();
         assert_eq!(
             "1.000000000000000000000000000000000E+6144".to_string(),
@@ -450,7 +588,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x01,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+        let dec128 = Decimal128::from_raw_buf(vec);
         let decimal = dec128.to_string();
         assert_eq!("1E-6176".to_string(), decimal)
     }
