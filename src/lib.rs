@@ -22,6 +22,7 @@ pub struct Decimal128 {
     pub sign: bool,
     pub exponent: Exponent,
     pub significand: Significand,
+    pub bytes: [u8; 16],
     nan: bool,
     inf: bool,
 }
@@ -162,6 +163,7 @@ impl Decimal128 {
                 sign,
                 exponent: total_exp,
                 significand: total_sig,
+                bytes: buffer,
                 nan: false,
                 inf: false,
             },
@@ -169,6 +171,7 @@ impl Decimal128 {
                 sign,
                 exponent: total_exp,
                 significand: total_sig,
+                bytes: buffer,
                 nan: true,
                 inf: false,
             },
@@ -176,6 +179,7 @@ impl Decimal128 {
                 sign,
                 exponent: total_exp,
                 significand: total_sig,
+                bytes: buffer,
                 nan: false,
                 inf: true,
             },
@@ -396,6 +400,13 @@ impl fmt::Display for Decimal128 {
     }
 }
 
+// this should be the same as Display trait
+impl fmt::Debug for Decimal128 {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, fmt)
+    }
+}
+
 impl PartialOrd<Decimal128> for Decimal128 {
     fn partial_cmp(&self, other: &Decimal128) -> Option<Ordering> {
         match self.compare(other) {
@@ -410,6 +421,24 @@ impl PartialOrd<Decimal128> for Decimal128 {
 impl PartialEq<Decimal128> for Decimal128 {
     fn eq(&self, other: &Decimal128) -> bool {
         self.compare(other) == 0
+    }
+}
+
+/// Format Decimal128 as an engineering string
+/// TODO: this currently only uses the default to_string method for Decimal128
+/// and needs to actually do the engineering string formatting.
+impl fmt::LowerExp for Decimal128 {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, fmt)
+    }
+}
+/// Formats Decimal128 to hexadecimal binary representation.
+impl fmt::LowerHex for Decimal128 {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        for b in self.bytes.iter().rev() {
+            write!(fmt, "{:02x}", b)?;
+        }
+        Ok(())
     }
 }
 
