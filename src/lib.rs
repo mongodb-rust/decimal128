@@ -7,6 +7,7 @@ use byteorder::*;
 use std::cmp::Ordering;
 use std::fmt;
 use std::io::Cursor;
+use std::str::FromStr;
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub struct Exponent {
@@ -33,7 +34,49 @@ pub enum NumberType {
     Finite,
 }
 
+impl From<i32> for Decimal128 {
+    fn from(v: i32) -> Self {
+        unimplemented!()
+    }
+}
+
+impl From<u32> for Decimal128 {
+    fn from(v: u32) -> Self {
+        unimplemented!()
+    }
+}
+
+impl FromStr for Decimal128 {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        unimplemented!()
+    }
+}
+
+impl Into<i32> for Decimal128 {
+    fn into(self) -> i32 {
+        unimplemented!()
+    }
+}
+
+impl Into<u32> for Decimal128 {
+    fn into(self) -> u32 {
+        unimplemented!()
+    }
+}
+
 impl Decimal128 {
+    pub fn zero() -> Self {
+        Decimal128 {
+            sign: false,
+            exponent: Exponent::new(),
+            significand: Significand::new(),
+            bytes: [0u8; 16],
+            nan: false,
+            inf: false,
+        }
+    }
+
     /// Create a Decimal128 from a [u8; 16].
     ///
     /// This method extracts out the sign, exponent and signficand, uses Binary
@@ -45,9 +88,9 @@ impl Decimal128 {
     /// use decimal128::*;
     ///
     /// let vec: [u8; 16] = [9, 16, 3, 6, 7, 86, 76, 81, 89, 0, 3, 45, 12, 71, 52, 39];
-    /// let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+    /// let dec128 = unsafe { Decimal128::from_raw_bytes(vec) };
     /// ```
-    pub fn from_raw_buf(buffer: [u8; 16]) -> Self {
+    pub unsafe fn from_raw_bytes(buffer: [u8; 16]) -> Self {
         // decimal 128's exponent is 14bits long; we will construct a u16 and
         // fill up the first two bits as zeros and then get its value.
         let mut total_exp = Exponent::new();
@@ -207,6 +250,10 @@ impl Decimal128 {
         return !self.is_negative();
     }
 
+    pub fn is_zero(&self) -> bool {
+        return !self.nan && self.exponent.is_zero() && self.significand.is_zero()
+    }
+
     /// Converts Decimal128 to string. Uses information in
     /// [speleotrove](http://speleotrove.com/decimal/daconvs.html) decimal
     /// documentation.
@@ -277,6 +324,11 @@ impl Decimal128 {
             }
         }
         format!("{}", self.significand.to_num())
+    }
+
+    /// Returns raw bytes.
+    pub fn to_raw_bytes(&self) -> [u8; 16] {
+        self.bytes
     }
 
     fn use_scientific_notation(&self) -> bool {
@@ -455,6 +507,10 @@ impl Exponent {
         self.vec.append(vec)
     }
 
+    pub fn is_zero(&self) -> bool {
+        self.to_num() == 0
+    }
+
     pub fn to_num(&self) -> u16 {
         let mut reader = Cursor::new(&self.vec);
         reader.read_u16::<byteorder::BigEndian>().unwrap()
@@ -479,6 +535,11 @@ impl Significand {
 
     pub fn append(&mut self, vec: &mut BitVec) {
         self.vec.append(vec)
+    }
+
+    pub fn is_zero(&self) -> bool {
+        // FIXME: Very inefficient, but docs are down
+        self.count_digits() == 0
     }
 
     pub fn to_num(&self) -> u128 {
@@ -527,7 +588,7 @@ mod tests {
             0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec);
+        let dec128 = unsafe { Decimal128::from_raw_bytes(vec) };
         let string = dec128.to_string();
         assert_eq!("-Infinity".to_string(), string);
     }
@@ -537,7 +598,7 @@ mod tests {
             0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec);
+        let dec128 = unsafe { Decimal128::from_raw_bytes(vec) };
         let string = dec128.to_string();
         assert_eq!("Infinity".to_string(), string);
     }
@@ -548,7 +609,7 @@ mod tests {
             0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec);
+        let dec128 = unsafe { Decimal128::from_raw_bytes(vec) };
         let string = dec128.to_string();
         assert_eq!("NaN".to_string(), string);
     }
@@ -559,7 +620,7 @@ mod tests {
             0x30, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x04, 0xd2,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec);
+        let dec128 = unsafe { Decimal128::from_raw_bytes(vec) };
         let decimal = dec128.to_string();
         assert_eq!("0.001234".to_string(), decimal);
     }
@@ -570,7 +631,7 @@ mod tests {
             0x30, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1c, 0xbe, 0x99,
             0x1a, 0x14,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec);
+        let dec128 = unsafe { Decimal128::from_raw_bytes(vec) };
         let decimal = dec128.to_string();
         assert_eq!("123456789012".to_string(), decimal)
     }
@@ -581,7 +642,7 @@ mod tests {
             0x30, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x5a,
             0xef, 0x40,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec);
+        let dec128 = unsafe { Decimal128::from_raw_bytes(vec) };
         let decimal = dec128.to_string();
         assert_eq!("0.00123400000".to_string(), decimal)
     }
@@ -592,7 +653,7 @@ mod tests {
             0x2f, 0xfc, 0x3c, 0xde, 0x6f, 0xff, 0x97, 0x32, 0xde, 0x82, 0x5c, 0xd0, 0x7e, 0x96,
             0xaf, 0xf2,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec);
+        let dec128 = unsafe { Decimal128::from_raw_bytes(vec) };
         let decimal = dec128.to_string();
         assert_eq!("0.1234567890123456789012345678901234".to_string(), decimal)
     }
@@ -603,7 +664,7 @@ mod tests {
             0x5f, 0xfe, 0x31, 0x4d, 0xc6, 0x44, 0x8d, 0x93, 0x38, 0xc1, 0x5b, 0x0a, 0x00, 0x00,
             0x00, 0x00,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec);
+        let dec128 = unsafe { Decimal128::from_raw_bytes(vec) };
         let decimal = dec128.to_string();
         assert_eq!(
             "1.000000000000000000000000000000000E+6144".to_string(),
@@ -617,7 +678,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x01,
         ];
-        let dec128 = Decimal128::from_raw_buf(vec);
+        let dec128 = unsafe { Decimal128::from_raw_bytes(vec) };
         let decimal = dec128.to_string();
         assert_eq!("1E-6176".to_string(), decimal)
     }
