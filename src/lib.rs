@@ -45,7 +45,7 @@ impl Decimal128 {
     /// use decimal128::*;
     ///
     /// let vec: [u8; 16] = [9, 16, 3, 6, 7, 86, 76, 81, 89, 0, 3, 45, 12, 71, 52, 39];
-    /// let dec128 = Decimal128::from_raw_buf(vec).unwrap();
+    /// let dec128 = Decimal128::from_raw_buf(vec);
     /// ```
     pub fn from_raw_buf(buffer: [u8; 16]) -> Self {
         // decimal 128's exponent is 14bits long; we will construct a u16 and
