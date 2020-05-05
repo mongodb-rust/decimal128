@@ -1,6 +1,8 @@
 [package]
 name = "decimal128"
 version = "0.1.0"
+license = "Apache-2.0"
+description = "128-bit wide floating point implementation for Rust"
 authors = ["lrlna <shestak.irina@gmail.com>"]
 edition = "2018"
 
