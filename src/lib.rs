@@ -35,20 +35,20 @@ pub enum NumberType {
 }
 
 impl From<i32> for Decimal128 {
-    fn from(v: i32) -> Self {
+    fn from(_v: i32) -> Self {
         unimplemented!()
     }
 }
 
 impl From<u32> for Decimal128 {
-    fn from(v: u32) -> Self {
+    fn from(_v: u32) -> Self {
         unimplemented!()
     }
 }
 
 impl FromStr for Decimal128 {
     type Err = ();
-    fn from_str(s: &str) -> Result<Self, ()> {
+    fn from_str(_s: &str) -> Result<Self, ()> {
         unimplemented!()
     }
 }
@@ -88,7 +88,7 @@ impl Decimal128 {
     /// use decimal128::*;
     ///
     /// let vec: [u8; 16] = [9, 16, 3, 6, 7, 86, 76, 81, 89, 0, 3, 45, 12, 71, 52, 39];
-    /// let dec128 = Decimal128::from_raw_buf(vec);
+    /// let dec128 = Decimal128::from_raw_bytes(vec);
     /// ```
     pub fn from_raw_bytes(buffer: [u8; 16]) -> Self {
         // decimal 128's exponent is 14bits long; we will construct a u16 and
@@ -276,6 +276,11 @@ impl Decimal128 {
         return if !self.sign { str } else { format!("-{}", str) };
     }
 
+    /// Returns raw bytes.
+    pub fn to_raw_bytes(&self) -> [u8; 16] {
+        self.bytes
+    }
+
     fn create_string(&self) -> String {
         if self.use_scientific_notation() {
             let exp_sign = if self.exponent.to_adjusted() < 0 {
@@ -324,11 +329,6 @@ impl Decimal128 {
             }
         }
         format!("{}", self.significand.to_num())
-    }
-
-    /// Returns raw bytes.
-    pub fn to_raw_bytes(&self) -> [u8; 16] {
-        self.bytes
     }
 
     fn use_scientific_notation(&self) -> bool {
