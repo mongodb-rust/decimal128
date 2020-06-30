@@ -36,32 +36,32 @@ pub enum NumberType {
 
 impl From<i32> for Decimal128 {
     fn from(_v: i32) -> Self {
-        unimplemented!()
+        unimplemented!("Creating Decimal128 from i32 is not yet implemented.")
     }
 }
 
 impl From<u32> for Decimal128 {
     fn from(_v: u32) -> Self {
-        unimplemented!()
+        unimplemented!("Creating Decimal128 from u32 is not yet implemented.")
     }
 }
 
 impl FromStr for Decimal128 {
     type Err = ();
     fn from_str(_s: &str) -> Result<Self, ()> {
-        unimplemented!()
+        unimplemented!("Creating Decimal128 from string is not yet implemented.")
     }
 }
 
 impl Into<i32> for Decimal128 {
     fn into(self) -> i32 {
-        unimplemented!()
+        unimplemented!("Creating i32 from Decimal128 is not yet implemented.")
     }
 }
 
 impl Into<u32> for Decimal128 {
     fn into(self) -> u32 {
-        unimplemented!()
+        unimplemented!("Creating u32 from Decimal128 is not yet implemented.")
     }
 }
 
