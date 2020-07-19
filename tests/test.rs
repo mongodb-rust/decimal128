@@ -1,4 +1,4 @@
-use decimal128::*;
+use decimal128;
 
 #[test]
 fn it_returns_negative_infinity() {

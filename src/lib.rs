@@ -2,21 +2,16 @@
 //! [1bits]  [   14bits   ]  [   113 bits   ]
 //!  sign       exponent        significand
 //!              field  
-use bitvec::{bitvec, BigEndian, BitVec};
-use byteorder::*;
+use bitvec::prelude::*;
 use std::cmp::Ordering;
 use std::fmt;
-use std::io::Cursor;
 use std::str::FromStr;
 
-#[derive(Clone, PartialEq, PartialOrd)]
-pub struct Exponent {
-    vec: BitVec<BigEndian>,
-}
-#[derive(Clone, PartialEq, PartialOrd)]
-pub struct Significand {
-    vec: BitVec<BigEndian>,
-}
+mod significand;
+mod exponent;
+
+pub use significand::Significand;
+pub use exponent::Exponent;
 
 #[derive(Clone)]
 pub struct Decimal128 {
@@ -134,9 +129,9 @@ impl Decimal128 {
                     // in this case second byte of the buffer can just be
                     // straight up appended to the exponent.
                     let byte_2 = buffer[1];
-                    let mut sb_bv: BitVec = (&[byte_2] as &[u8]).into();
-                    total_exp.append(&mut sb_bv);
-                    // out of the third byte the first bit are part of the
+                    let mut second_byte_bitvec = BitVec::from_element(byte_2); 
+                    total_exp.append(&mut second_byte_bitvec);
+                    // out of the third byte the first bit is part of the
                     // exponent, and the last 7 bits are part of the significand
                     let byte_3 = buffer[1];
                     let h = if (byte_2 | 0b0111_1111) == max { 1 } else { 0 };
@@ -188,8 +183,8 @@ impl Decimal128 {
                     total_sig.append(&mut sig);
                     // add the whole third byte to the signficand in this case
                     let byte_3 = buffer[2];
-                    let mut tb_bv: BitVec = (&[byte_3] as &[u8]).into();
-                    total_sig.append(&mut tb_bv);
+                    let mut third_byte_bitvec = BitVec::from_element(byte_3);
+                    total_sig.append(&mut third_byte_bitvec);
                     NumberType::Finite
                 }
             },
@@ -197,8 +192,9 @@ impl Decimal128 {
 
         // the rest of the bytes of the vec we are passed in.
         for bytes in 3..buffer.len() {
-            let mut bv: BitVec = (&[buffer[bytes]] as &[u8]).into();
-            total_sig.append(&mut bv);
+            let mut bitvec = BitVec::from_element(buffer[bytes]);
+            // let mut bv: BitVec = (&[buffer[bytes]] as &[u8]).into();
+            total_sig.append(&mut bitvec);
         }
 
         let dec128 = match combination_field {
@@ -491,84 +487,6 @@ impl fmt::LowerHex for Decimal128 {
             write!(fmt, "{:02x}", b)?;
         }
         Ok(())
-    }
-}
-
-/// Exponent is a 14-bit portion of decimal128 that follows the sign bit. Here we
-/// are storing it as a 16-bit BitVec that can be later converted to a u16.
-impl Exponent {
-    pub fn new() -> Self {
-        Exponent {
-            vec: bitvec![BigEndian, u8; 0; 2],
-        }
-    }
-
-    pub fn append(&mut self, vec: &mut BitVec) {
-        self.vec.append(vec)
-    }
-
-    pub fn is_zero(&self) -> bool {
-        self.to_num() == 0
-    }
-
-    pub fn to_num(&self) -> u16 {
-        let mut reader = Cursor::new(&self.vec);
-        reader.read_u16::<byteorder::BigEndian>().unwrap()
-    }
-
-    // compare current exponent value with exponent bias (largest possible
-    // exponent value)
-    // TODO: check if 6176 (exponent bias) can be stored as u16
-    pub fn to_adjusted(&self) -> i16 {
-        self.to_num() as i16 - 6176 as i16
-    }
-}
-
-/// Significand is a padded 111- or 113-bit coefficient. We are storing it as a
-/// 128-bit BitVec with the padded difference. This can be converted to a u128.
-impl Significand {
-    pub fn new() -> Self {
-        Significand {
-            vec: bitvec![BigEndian, u8; 0; 14],
-        }
-    }
-
-    pub fn append(&mut self, vec: &mut BitVec) {
-        self.vec.append(vec)
-    }
-
-    pub fn is_zero(&self) -> bool {
-        // FIXME: Very inefficient, but docs are down
-        self.count_digits() == 0
-    }
-
-    pub fn to_num(&self) -> u128 {
-        let mut reader = Cursor::new(&self.vec);
-        reader.read_u128::<byteorder::BigEndian>().unwrap()
-    }
-
-    pub fn max_value() -> u128 {
-        u128::from_str_radix("9999999999999999999999999999999999", 10).unwrap()
-    }
-
-    // count the number of digits in the significand. This method first converts
-    // significand BitVec into a u128 number, then converts it to string to
-    // count characters and collects them in a vec to look at the vec's length.
-    //
-    // We return a u16 number of digits, as it's easier to compare to the
-    // exponent since that's also stored as a u16.
-    fn count_digits(&self) -> i16 {
-        self.as_digit_vec().len() as i16
-    }
-
-    fn as_digit_vec(&self) -> Vec<u32> {
-        let digits: Vec<u32> = self
-            .to_num()
-            .to_string()
-            .chars()
-            .map(|c| c.to_digit(10).unwrap())
-            .collect();
-        return digits;
     }
 }
 

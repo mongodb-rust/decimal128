@@ -1,12 +1,12 @@
 [package]
+authors = ["lrlna <shestak.irina@gmail.com>"]
+description = "128-bit wide floating point implementation for Rust"
+edition = "2018"
+license = "Apache-2.0"
 name = "decimal128"
 version = "0.1.0"
-license = "Apache-2.0"
-description = "128-bit wide floating point implementation for Rust"
-authors = ["lrlna <shestak.irina@gmail.com>"]
-edition = "2018"
 
 [dependencies]
+bitvec = "0.17.4"
+byteorder = "1.3.4"
 failure = "0.1.2"
-byteorder = "1.2.1"
-bitvec = "0.10.1"
