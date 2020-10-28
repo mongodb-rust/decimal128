@@ -3,4 +3,3 @@
 [[package]]
 name = "decimal128"
 version = "0.1.0"
-

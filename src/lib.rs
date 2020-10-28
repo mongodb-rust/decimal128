@@ -159,87 +159,135 @@ impl Decimal128 {
                     if (byte_3 | 0b0111_1111) == max {
                         num.exp |= 1;
                     }
-                    let i = if (byte_3 | 0b1011_1111) == max { 1 } else { 0 };
-                    let j = if (byte_3 | 0b1101_1111) == max { 1 } else { 0 };
-                    let k = if (byte_3 | 0b1110_1111) == max { 1 } else { 0 };
-                    let l = if (byte_3 | 0b1111_0111) == max { 1 } else { 0 };
-                    let m = if (byte_3 | 0b1111_1011) == max { 1 } else { 0 };
-                    let n = if (byte_3 | 0b1111_1101) == max { 1 } else { 0 };
-                    let o = if (byte_3 | 0b1111_1110) == max { 1 } else { 0 };
+                    // significand is 128 bits
+                    // when are shifting our math is based on total of 127.
+                    // the first 14 bits of 128 bits need to be 0s
+                    // 127-14 = 113
+
                     // Start a new vec for 111bit significand. This version of
                     // the significand is offset by two bits, so we pad it with
                     // `100`
-                    let mut sig = bitvec![1, 0, 0, i, j, k, l, m, n, o];
-                    total_sig.append(&mut sig);
+                    num.sig |= 1 << 113;
+                    num.sig |= 0 << 112;
+                    num.sig |= 0 << 111;
+
+                    if (byte | 0b1011_1111) == max {
+                        num.sig |= 1 << 110;
+                    }
+                    if (byte | 0b1101_1111) == max {
+                        num.sig |= 1 << 109;
+                    }
+                    if (byte | 0b1110_1111) == max {
+                        num.sig |= 1 << 108;
+                    }
+                    if (byte | 0b1111_0111) == max {
+                        num.sig |= 1 << 107;
+                    }
+                    if (byte | 0b1111_1011) == max {
+                        num.sig |= 1 << 106;
+                    }
+                    if (byte | 0b1111_1101) == max {
+                        num.sig |= 1 << 105;
+                    }
+                    if (byte | 0b1111_1110) == max {
+                        num.sig |= 1 << 104;
+                    }
                     NumberType::Finite
                 }
                 _ => {
                     // if the first two bits after the sign are `00`, `01`,
                     // `10`, we add the remainder of the first byte to exponent
-                    let a = if (byte | 0b1011_1111) == max { 1 } else { 0 };
-                    let b = if (byte | 0b1101_1111) == max { 1 } else { 0 };
-                    let c = if (byte | 0b1110_1111) == max { 1 } else { 0 };
-                    let d = if (byte | 0b1111_0111) == max { 1 } else { 0 };
-                    let e = if (byte | 0b1111_1011) == max { 1 } else { 0 };
-                    let f = if (byte | 0b1111_1101) == max { 1 } else { 0 };
-                    let g = if (byte | 0b1111_1110) == max { 1 } else { 0 };
-                    let mut exp = bitvec![a, b, c, d, e, f, g];
-                    total_exp.append(&mut exp);
+
+                    // we are filling up a u16 (16bits), but exponent is only 14,
+                    // so we need to leave the first two bits as 00
+                    // 15 - 2 = 13
+                    if (byte | 0b1011_1111) == max {
+                        num.exp |= 1 << 13;
+                    }
+                    if (byte | 0b1101_1111) == max {
+                        num.exp |= 1 << 12;
+                    }
+                    if (byte | 0b1110_1111) == max {
+                        num.exp |= 1 << 11;
+                    }
+                    if (byte | 0b1111_0111) == max {
+                        num.exp |= 1 << 10;
+                    }
+                    if (byte | 0b1111_1011) == max {
+                        num.exp |= 1 << 9;
+                    }
+                    if (byte | 0b1111_1101) == max {
+                        num.exp |= 1 << 8;
+                    }
+                    if (byte | 0b1111_1110) == max {
+                        num.exp |= 1 << 7;
+                    }
                     // out of the second byte the first 7 bits are part of the
-                    // exponent, and the last bit if part of the significand
+                    // exponent, and the last bit is part of the significand
                     let byte_2 = buffer[1];
-                    let h = if (byte_2 | 0b0111_1111) == max { 1 } else { 0 };
-                    let i = if (byte_2 | 0b1011_1111) == max { 1 } else { 0 };
-                    let j = if (byte_2 | 0b1101_1111) == max { 1 } else { 0 };
-                    let k = if (byte_2 | 0b1110_1111) == max { 1 } else { 0 };
-                    let l = if (byte_2 | 0b1111_0111) == max { 1 } else { 0 };
-                    let m = if (byte_2 | 0b1111_1011) == max { 1 } else { 0 };
-                    let n = if (byte_2 | 0b1111_1101) == max { 1 } else { 0 };
-                    let mut exp_cont = bitvec![h, i, j, k, l, m, n];
-                    total_exp.append(&mut exp_cont);
-                    let o = if (byte_2 | 0b1111_1110) == max { 1 } else { 0 };
+                    if (byte_2 | 0b0111_1111) == max {
+                        num.exp |= 1 << 6;
+                    }
+                    if (byte_2 | 0b1011_1111) == max {
+                        num.exp |= 1 << 5;
+                    }
+                    if (byte_2 | 0b1101_1111) == max {
+                        num.exp |= 1 << 4;
+                    }
+                    if (byte_2 | 0b1110_1111) == max {
+                        num.exp |= 1 << 3;
+                    }
+                    if (byte_2 | 0b1111_0111) == max {
+                        num.exp |= 1 << 2;
+                    }
+                    if (byte_2 | 0b1111_1011) == max {
+                        num.exp |= 1 << 1;
+                    }
+                    if (byte_2 | 0b1111_1101) == max {
+                        num.exp |= 1;
+                    }
                     // Start a new vec for 113bit significand. Since this
                     // version of significand is not offset, we pad it with only
                     // `0`
-                    let mut sig = bitvec![0, o];
-                    total_sig.append(&mut sig);
+                    num.sig |= 0 << 113;
+                    if (byte_2 | 0b1111_1110) == max {
+                        num.sig |= 112;
+                    }
                     // add the whole third byte to the signficand in this case
-                    let byte_3 = buffer[2];
-                    let mut third_byte_bitvec = BitVec::from_element(byte_3);
-                    total_sig.append(&mut third_byte_bitvec);
+                    num.sig |= (buffer[2] as u128) << 111;
                     NumberType::Finite
                 }
             },
         };
 
-        // the rest of the bytes of the vec we are passed in.
+        // the rest of the bytes of the vec we are paC
+        // significand. We can bit shift them all in.
+        // 111 - 8 = 103
         for bytes in 3..buffer.len() {
-            let mut bitvec = BitVec::from_element(buffer[bytes]);
-            // let mut bv: BitVec = (&[buffer[bytes]] as &[u8]).into();
-            total_sig.append(&mut bitvec);
+            num.sig |= (buffer[bytes] as u128) << 103;
         }
 
         let dec128 = match combination_field {
             NumberType::Finite => Decimal128 {
                 sign,
-                exponent: total_exp,
-                significand: total_sig,
+                exp: num.exp,
+                sig: num.sig,
                 bytes: buffer,
                 nan: false,
                 inf: false,
             },
             NumberType::NaN => Decimal128 {
                 sign,
-                exponent: total_exp,
-                significand: total_sig,
+                exp: num.exp,
+                sig: num.sig,
                 bytes: buffer,
                 nan: true,
                 inf: false,
             },
             NumberType::Infinity => Decimal128 {
                 sign,
-                exponent: total_exp,
-                significand: total_sig,
+                exp: num.exp,
+                sig: num.sig,
                 bytes: buffer,
                 nan: false,
                 inf: true,
@@ -247,7 +295,6 @@ impl Decimal128 {
         };
         dec128
     }
-    //
     //     pub fn is_nan(&self) -> bool {
     //         if self.nan {
     //             return true;
