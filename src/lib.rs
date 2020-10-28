@@ -3,15 +3,9 @@
 //!  sign       exponent        significand
 //!              field  
 
-// use std::cmp::Ordering;
-// use std::fmt;
-// use std::str::FromStr;
-
-mod exponent;
-mod significand;
-
-use exponent::Exponent;
-use significand::Significand;
+use std::cmp::Ordering;
+use std::fmt;
+use std::str::FromStr;
 
 #[derive(Clone)]
 pub struct Decimal128 {
@@ -28,38 +22,38 @@ enum NumberType {
     Infinity,
     Finite,
 }
-//
-// impl From<i32> for Decimal128 {
-//     fn from(_v: i32) -> Self {
-//         unimplemented!("Creating Decimal128 from i32 is not yet implemented.")
-//     }
-// }
-//
-// impl From<u32> for Decimal128 {
-//     fn from(_v: u32) -> Self {
-//         unimplemented!("Creating Decimal128 from u32 is not yet implemented.")
-//     }
-// }
-//
-// impl FromStr for Decimal128 {
-//     type Err = ();
-//     fn from_str(_s: &str) -> Result<Self, ()> {
-//         unimplemented!("Creating Decimal128 from string is not yet implemented.")
-//     }
-// }
-//
-// impl Into<i32> for Decimal128 {
-//     fn into(self) -> i32 {
-//         unimplemented!("Creating i32 from Decimal128 is not yet implemented.")
-//     }
-// }
-//
-// impl Into<u32> for Decimal128 {
-//     fn into(self) -> u32 {
-//         unimplemented!("Creating u32 from Decimal128 is not yet implemented.")
-//     }
-// }
-//
+
+impl From<i32> for Decimal128 {
+    fn from(_v: i32) -> Self {
+        unimplemented!("Creating Decimal128 from i32 is not yet implemented.")
+    }
+}
+
+impl From<u32> for Decimal128 {
+    fn from(_v: u32) -> Self {
+        unimplemented!("Creating Decimal128 from u32 is not yet implemented.")
+    }
+}
+
+impl FromStr for Decimal128 {
+    type Err = ();
+    fn from_str(_s: &str) -> Result<Self, ()> {
+        unimplemented!("Creating Decimal128 from string is not yet implemented.")
+    }
+}
+
+impl Into<i32> for Decimal128 {
+    fn into(self) -> i32 {
+        unimplemented!("Creating i32 from Decimal128 is not yet implemented.")
+    }
+}
+
+impl Into<u32> for Decimal128 {
+    fn into(self) -> u32 {
+        unimplemented!("Creating u32 from Decimal128 is not yet implemented.")
+    }
+}
+
 impl Decimal128 {
     //     pub fn zero() -> Self {
     //         Decimal128 {
@@ -159,6 +153,7 @@ impl Decimal128 {
                     if (byte_3 | 0b0111_1111) == max {
                         num.exp |= 1;
                     }
+
                     // significand is 128 bits
                     // when are shifting our math is based on total of 127.
                     // the first 14 bits of 128 bits need to be 0s
@@ -260,7 +255,7 @@ impl Decimal128 {
             },
         };
 
-        // the rest of the bytes of the vec we are paC
+        // the rest of the bytes of the vec are part of the
         // significand. We can bit shift them all in.
         // 111 - 8 = 103
         for bytes in 3..buffer.len() {
@@ -295,273 +290,299 @@ impl Decimal128 {
         };
         dec128
     }
-    //     pub fn is_nan(&self) -> bool {
-    //         if self.nan {
-    //             return true;
-    //         } else {
-    //             return false;
-    //         }
-    //     }
+
+    pub fn is_nan(&self) -> bool {
+        self.nan
+    }
+
+    pub fn is_negative(&self) -> bool {
+        self.sign
+    }
+
+    pub fn is_positive(&self) -> bool {
+        !self.is_negative()
+    }
+
+    pub fn is_zero(&self) -> bool {
+        !self.nan && self.exp == 0 && self.sig == 0
+    }
+
+    /// Converts Decimal128 to string. Uses information in
+    /// [speleotrove](http://speleotrove.com/decimal/daconvs.html) decimal
+    /// documentation.
+    pub fn to_string(&self) -> String {
+        // Just return the string 'NaN' if we are dealing with NaN.
+        // This does *not* come with a 'sign'.
+        if self.nan {
+            return String::from("NaN");
+        };
+
+        // Everything else can have a sign.
+
+        // We can create a string from 'Infinity' or a Finite number.
+        let str = if self.inf {
+            "Infinity".to_string()
+        } else {
+            self.create_string()
+        };
+
+        // Specifically add a '-' sign to our string if this is a negative number.
+        return if !self.sign { str } else { format!("-{}", str) };
+    }
+
+    /// Returns raw bytes.
+    pub fn to_raw_bytes(&self) -> [u8; 16] {
+        self.bytes
+    }
+
+    fn create_string(&self) -> String {
+        if self.use_scientific_notation() {
+            let exp_sign = if self.adjust_exponent() < 0 {
+                ""
+            } else {
+                "+"
+            };
+
+            if self.sig_as_digit_vec().len() > 1 {
+                let mut first_significand = self.sig_as_digit_vec().clone();
+                // We already used the first digit, so only stringify the
+                // remainder of the significand.
+                let remainder_significand = stringify_vec(first_significand.split_off(1));
+                return format!(
+                    "{first_significand}.{remainder_significand}E{exp_sign}{scientific_exponent}",
+                    first_significand = first_significand[0],
+                    remainder_significand = remainder_significand,
+                    exp_sign = exp_sign,
+                    scientific_exponent = self.scientific_exponent()
+                );
+            } else {
+                return format!(
+                    "{significand}E{exp_sign}{scientific_exponent}",
+                    significand = self.sig,
+                    exp_sign = exp_sign,
+                    scientific_exponent = self.scientific_exponent()
+                );
+            }
+        } else if self.adjust_exponent() < 0 {
+            if self.count_sig_digits() > self.adjust_exponent().abs() {
+                let dec_point = self.get_decimal_point_index() as usize;
+                let mut significand_vec = self.sig_as_digit_vec().clone();
+                let remainder_significand = stringify_vec(significand_vec.split_off(dec_point - 1));
+                return format!(
+                    "{first_significand}.{remainder_significand}",
+                    first_significand = significand_vec[0],
+                    remainder_significand = remainder_significand
+                );
+            } else {
+                let zero_pad = self.get_zero_padding();
+                return format!(
+                    "0.{zero_pad}{significand}",
+                    zero_pad = zero_pad,
+                    significand = self.sig
+                );
+            }
+        }
+        format!("{}", self.sig)
+    }
+
+    fn use_scientific_notation(&self) -> bool {
+        self.adjust_exponent() > 0 || (self.scientific_exponent() as i16) < -6
+    }
+
+    fn scientific_exponent(&self) -> i16 {
+        // first variable is number of digits in a significand
+        (self.count_sig_digits() - 1) + self.adjust_exponent()
+    }
+
+    // Compare current exponent value with exponent bias, 6176, which is also the largest
+    // possible exponent value.
     //
-    //     pub fn is_negative(&self) -> bool {
-    //         if self.sign {
-    //             return true;
-    //         } else {
-    //             return false;
-    //         }
-    //     }
+    // We convert exp and exponent bias to an i16 as this number _can_ be signed.
+    fn adjust_exponent(&self) -> i16 {
+       self.exp as i16 - 6176 as i16
+    }
+
+    // Convert significand into a vec of numbers.
+    // For example, if the number is 128765, the vec will look like [1, 2, 8, 7, 6, 5]
+    fn sig_as_digit_vec(&self) -> Vec<u32> {
+        let digits: Vec<u32> = self.sig
+            .to_string()
+            .chars()
+            .map(|c| c.to_digit(10).unwrap())
+            .collect();
+        return digits;
+    }
+
+    // Count the number of digits in the significand.
     //
-    //     pub fn is_positive(&self) -> bool {
-    //         return !self.is_negative();
-    //     }
+    // This method first converts significand into a digit vec.
     //
-    //     pub fn is_zero(&self) -> bool {
-    //         return !self.nan && self.exponent.is_zero() && self.significand.is_zero()
-    //     }
+    // We then return a u16 number of digits, as it's easier to compare to the
+    // exponent since that's also stored as a u16.
+    fn count_sig_digits(&self) -> i16 {
+        self.sig_as_digit_vec().len() as i16
+    }
+
+    // Determines where to put the decimal point for larger numbers.
+    fn get_decimal_point_index(&self) -> i16 {
+        self.count_sig_digits() - self.adjust_exponent().abs()
+    }
+
+    // Determines how many zeroes to pad smaller numbers with.
+    fn get_zero_padding(&self) -> String {
+        let left_zero_pad_count: i16 =
+            (self.adjust_exponent() + self.count_sig_digits()).abs();
+        std::iter::repeat("0")
+            .take(left_zero_pad_count as usize)
+            .collect::<String>()
+    }
+
+    /// Creates a compare function that returns a decimal 128 that's either:
+    /// * -1 = less than
+    /// * 0 = equal
+    /// * 1 = greater than
+    ///
+    /// When comparing and ordering Decimal128, we should end up with:
+    /// (-) NaN | -Infinity | x < 0 | -0 | +0 | x > 0 | +Infinity | (+) NaN
+    ///
+    /// Even though NaN can't be negative or positive, when reading the sign bit,
+    /// (-) NaN < (+) NaN
     //
-    //     /// Converts Decimal128 to string. Uses information in
-    //     /// [speleotrove](http://speleotrove.com/decimal/daconvs.html) decimal
-    //     /// documentation.
-    //     pub fn to_string(&self) -> String {
-    //         // just return NaN if we are dealing with NaN. This does not come with a
-    //         // sign.
-    //         if self.nan {
-    //             return String::from("NaN");
-    //         };
-    //
-    //         // Everything else can have a sign. We can create a string from Infinity
-    //         // or a Finite number.
-    //         let str = if self.inf {
-    //             "Infinity".to_string()
-    //         } else {
-    //             self.create_string()
-    //         };
-    //
-    //         // add a sign if this is a negative number
-    //         return if !self.sign { str } else { format!("-{}", str) };
-    //     }
-    //
-    //     /// Returns raw bytes.
-    //     pub fn to_raw_bytes(&self) -> [u8; 16] {
-    //         self.bytes
-    //     }
-    //
-    //     fn create_string(&self) -> String {
-    //         if self.use_scientific_notation() {
-    //             let exp_sign = if self.exponent.to_adjusted() < 0 {
-    //                 ""
-    //             } else {
-    //                 "+"
-    //             };
-    //
-    //             if self.significand.as_digit_vec().len() > 1 {
-    //                 let mut first_significand = self.significand.as_digit_vec().clone();
-    //                 // we already used the first digit, so only stringify the
-    //                 // remainder of the significand
-    //                 let remainder_significand = stringify_vec(first_significand.split_off(1));
-    //                 return format!(
-    //                     "{first_significand}.{remainder_significand}E{exp_sign}{scientific_exponent}",
-    //                     first_significand = first_significand[0],
-    //                     remainder_significand = remainder_significand,
-    //                     exp_sign = exp_sign,
-    //                     scientific_exponent = self.scientific_exponent()
-    //                 );
-    //             } else {
-    //                 return format!(
-    //                     "{significand}E{exp_sign}{scientific_exponent}",
-    //                     significand = self.significand.to_num(),
-    //                     exp_sign = exp_sign,
-    //                     scientific_exponent = self.scientific_exponent()
-    //                 );
-    //             }
-    //         } else if self.exponent.to_adjusted() < 0 {
-    //             if self.significand.count_digits() > self.exponent.to_adjusted().abs() {
-    //                 let dec_point = self.get_decimal_point_index() as usize;
-    //                 let mut significand_vec = self.significand.as_digit_vec().clone();
-    //                 let remainder_significand = stringify_vec(significand_vec.split_off(dec_point - 1));
-    //                 return format!(
-    //                     "{first_significand}.{remainder_significand}",
-    //                     first_significand = significand_vec[0],
-    //                     remainder_significand = remainder_significand
-    //                 );
-    //             } else {
-    //                 let zero_pad = self.get_zero_padding();
-    //                 return format!(
-    //                     "0.{zero_pad}{significand}",
-    //                     zero_pad = zero_pad,
-    //                     significand = self.significand.to_num()
-    //                 );
-    //             }
-    //         }
-    //         format!("{}", self.significand.to_num())
-    //     }
-    //
-    //     fn use_scientific_notation(&self) -> bool {
-    //         (self.exponent.to_adjusted() as i16) > 0 || (self.scientific_exponent() as i16) < -6
-    //     }
-    //
-    //     fn scientific_exponent(&self) -> i16 {
-    //         // first variable is number of digits in a significand
-    //         (self.significand.count_digits() - 1) + self.exponent.to_adjusted()
-    //     }
-    //
-    //     // for larger numbers we want to know where to put the decimal point.
-    //     fn get_decimal_point_index(&self) -> i16 {
-    //         self.significand.count_digits() - self.exponent.to_adjusted().abs()
-    //     }
-    //
-    //     // for very small decimals, we need to know how many zeroes to pad it with.
-    //     fn get_zero_padding(&self) -> String {
-    //         let left_zero_pad_count =
-    //             (self.exponent.to_adjusted() + self.significand.count_digits()).abs();
-    //         std::iter::repeat("0")
-    //             .take(left_zero_pad_count as usize)
-    //             .collect::<String>()
-    //     }
-    //
-    //     /// create a compare functiont that returns a decimal 128 that's either:
-    //     /// * -1 = less than
-    //     /// * 0 = equal
-    //     /// * 1 = greater than
-    //     /// When comparing and orderign Decimal128, we should end up with:
-    //     /// (-) NaN | -Infinity | x < 0 | -0 | +0 | x > 0 | +Infinity | (+) NaN
-    //     ///
-    //     /// Even though NaN can't be negative or positive, when reading the sign bit,
-    //     /// (-) NaN < (+) NaN
-    //     //
-    //     // TODO: once we have a method to create Decimal128 from another number type
-    //     // (u32/i32/u128/i128), change this return type to be a Decimal128 as well.
-    //     pub fn compare(&self, other: &Decimal128) -> isize {
-    //         let self_exp = self.exponent.to_adjusted();
-    //         let other_exp = other.exponent.to_adjusted();
-    //         let self_signif = self.significand.to_num();
-    //         let other_signif = other.significand.to_num();
-    //
-    //         // NaN and Infinity will be ordered via the sign Check
-    //         if self.sign > other.sign {
-    //             -1
-    //         } else if self.sign < other.sign {
-    //             1
-    //         } else {
-    //             // since 1x10^3 is the same number as 10x10^2, we want to try to
-    //             // even out the exponents before comparing significands.
-    //             let exp_dif = (self_exp - other_exp).abs();
-    //             // however, if the difference is greeater than 66, they are
-    //             // definitely diffferent numbers. so we only try to mingle with
-    //             // exponents if the difference is less than 66.
-    //             if exp_dif <= 66 {
-    //                 if self_exp < other_exp {
-    //                     Decimal128::increase_exponent(self_signif, self_exp, other_exp);
-    //                     Decimal128::decrease_exponent(other_signif, other_exp, self_exp);
-    //                 } else if self_exp > other_exp {
-    //                     Decimal128::decrease_exponent(self_signif, self_exp, other_exp);
-    //                     Decimal128::increase_exponent(other_signif, other_exp, self_exp);
-    //                 }
-    //             }
-    //             if self_exp == other_exp {
-    //                 if self_signif > other_signif {
-    //                     1
-    //                 } else if self_signif < other_signif {
-    //                     -1
-    //                 } else {
-    //                     0
-    //                 }
-    //             } else {
-    //                 if self_exp > other_exp {
-    //                     1
-    //                 } else if self_exp < other_exp {
-    //                     -1
-    //                 } else {
-    //                     0
-    //                 }
-    //             }
-    //         }
-    //     }
-    //
-    //     // This is part of the effort to compare two different Decimal128 numbers.
-    //     fn increase_exponent(mut significand: u128, mut exponent: i16, goal: i16) {
-    //         if significand == 0 as u128 {
-    //             exponent = goal
-    //         }
-    //
-    //         while exponent < goal {
-    //             let significand_divided_by_10 = significand / 10;
-    //             if significand % 10 != 0 {
-    //                 break;
-    //             }
-    //             exponent += 1;
-    //             significand = significand_divided_by_10
-    //         }
-    //     }
-    //
-    //     // This is part of the effort to compare two different Decimal128 numbers.
-    //     fn decrease_exponent(mut significand: u128, mut exponent: i16, goal: i16) {
-    //         if significand == 0 as u128 {
-    //             exponent = goal
-    //         }
-    //
-    //         while exponent > goal {
-    //             let significand_times_10 = significand * 10;
-    //             if significand_times_10 - Significand::max_value() > 0 {
-    //                 break;
-    //             }
-    //             exponent -= 1;
-    //             significand = significand_times_10
-    //         }
-    //     }
+    // TODO: once we have a method to create Decimal128 from another number type
+    // (u32/i32/u128/i128), change this return type to be a Decimal128 as well.
+    pub fn compare(&self, other: &Decimal128) -> isize {
+        let self_exp = self.adjust_exponent();
+        let other_exp = other.adjust_exponent();
+        let self_sig = self.sig;
+        let other_sig = other.sig;
+
+        // NaN and Infinity will be ordered via the sign Check
+        if self.sign > other.sign {
+            -1
+        } else if self.sign < other.sign {
+            1
+        } else {
+            // since 1x10^3 is the same number as 10x10^2, we want to try to
+            // even out the exponents before comparing significands.
+            let exp_dif = (self_exp - other_exp).abs();
+            // however, if the difference is greater than 66, they are
+            // definitely diffferent numbers. so we only try to mingle with
+            // exponents if the difference is less than 66.
+            if exp_dif <= 66 {
+                if self_exp < other_exp {
+                    Decimal128::increase_exponent(self_sig, self_exp, other_exp);
+                    Decimal128::decrease_exponent(other_sig, other_exp, self_exp);
+                } else if self_exp > other_exp {
+                    Decimal128::decrease_exponent(self_sig, self_exp, other_exp);
+                    Decimal128::increase_exponent(other_sig, other_exp, self_exp);
+                }
+            }
+            if self_exp == other_exp {
+                if self_sig > other_sig {
+                    1
+                } else if self_sig < other_sig {
+                    -1
+                } else {
+                    0
+                }
+            } else {
+                if self_exp > other_exp {
+                    1
+                } else if self_exp < other_exp {
+                    -1
+                } else {
+                    0
+                }
+            }
+        }
+    }
+
+    // This is part of the effort to compare two different Decimal128 numbers.
+    fn increase_exponent(mut significand: u128, mut exponent: i16, goal: i16) {
+        if significand == 0 as u128 {
+            exponent = goal
+        }
+
+        while exponent < goal {
+            let significand_divided_by_10 = significand / 10;
+            if significand % 10 != 0 {
+                break;
+            }
+            exponent += 1;
+            significand = significand_divided_by_10
+        }
+    }
+
+    // This is part of the effort to compare two different Decimal128 numbers.
+    fn decrease_exponent(mut significand: u128, mut exponent: i16, goal: i16) {
+        let max_sig = u128::from_str_radix("9999999999999999999999999999999999", 10).unwrap();
+        if significand == 0 as u128 {
+            exponent = goal
+        }
+
+        while exponent > goal {
+            let significand_times_10 = significand * 10;
+            if (significand_times_10 - max_sig) > 0 {
+                break;
+            }
+            exponent -= 1;
+            significand = significand_times_10
+        }
+    }
 }
-//
-// impl fmt::Display for Decimal128 {
-//     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-//         write!(fmt, "{}", self.to_string())
-//     }
-// }
-//
-// // this should be the same as Display trait
-// impl fmt::Debug for Decimal128 {
-//     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-//         fmt::Display::fmt(self, fmt)
-//     }
-// }
-//
-// impl PartialOrd<Decimal128> for Decimal128 {
-//     fn partial_cmp(&self, other: &Decimal128) -> Option<Ordering> {
-//         match self.compare(other) {
-//             v if v == 0 => Some(Ordering::Equal),
-//             v if v > 0 => Some(Ordering::Greater),
-//             v if v < 0 => Some(Ordering::Less),
-//             _ => None,
-//         }
-//     }
-// }
-//
-// impl PartialEq<Decimal128> for Decimal128 {
-//     fn eq(&self, other: &Decimal128) -> bool {
-//         self.compare(other) == 0
-//     }
-// }
-//
-// /// Format Decimal128 as an engineering string
-// /// TODO: this currently only uses the default to_string method for Decimal128
-// /// and needs to actually do the engineering string formatting.
-// impl fmt::LowerExp for Decimal128 {
-//     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-//         fmt::Display::fmt(self, fmt)
-//     }
-// }
-// /// Formats Decimal128 to hexadecimal binary representation.
-// impl fmt::LowerHex for Decimal128 {
-//     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-//         for b in self.bytes.iter().rev() {
-//             write!(fmt, "{:02x}", b)?;
-//         }
-//         Ok(())
-//     }
-// }
-//
-// fn stringify_vec(vec: Vec<u32>) -> String {
-//     vec.into_iter()
-//         .map(|d| d.to_string())
-//         .collect::<Vec<String>>()
-//         .join("")
-// }
+
+impl fmt::Display for Decimal128 {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "{}", self.to_string())
+    }
+}
+
+ // this should be the same as Display trait
+ impl fmt::Debug for Decimal128 {
+     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+         fmt::Display::fmt(self, fmt)
+     }
+ }
+
+ impl PartialOrd<Decimal128> for Decimal128 {
+     fn partial_cmp(&self, other: &Decimal128) -> Option<Ordering> {
+         match self.compare(other) {
+             v if v == 0 => Some(Ordering::Equal),
+             v if v > 0 => Some(Ordering::Greater),
+             v if v < 0 => Some(Ordering::Less),
+             _ => None,
+         }
+     }
+ }
+
+ impl PartialEq<Decimal128> for Decimal128 {
+     fn eq(&self, other: &Decimal128) -> bool {
+         self.compare(other) == 0
+     }
+ }
+
+ /// Format Decimal128 as an engineering string
+ /// TODO: this currently only uses the default to_string method for Decimal128
+ /// and needs to actually do the engineering string formatting.
+ impl fmt::LowerExp for Decimal128 {
+     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+         fmt::Display::fmt(self, fmt)
+     }
+ }
+ /// Formats Decimal128 to hexadecimal binary representation.
+ impl fmt::LowerHex for Decimal128 {
+     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+         for b in self.bytes.iter().rev() {
+             write!(fmt, "{:02x}", b)?;
+         }
+         Ok(())
+     }
+ }
+
+
+fn stringify_vec(vec: Vec<u32>) -> String {
+    vec.into_iter()
+        .map(|d| d.to_string())
+        .collect::<Vec<String>>()
+        .join("")
+}
