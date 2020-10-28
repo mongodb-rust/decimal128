@@ -154,9 +154,16 @@ impl Decimal128 {
                         num.exp |= 1;
                     }
 
-                    // significand is 128 bits
-                    // when are shifting our math is based on total of 127.
-                    // the first 14 bits of 128 bits need to be 0s
+                    // Significand u128:
+                    // - 14 zeroes
+                    // - 1 0 0 padding
+                    // - 7 significand bits
+                    // - 13 bytes
+                    //
+                    // Significand is 128 bits.
+                    // When are shifting our math is based on total of 127.
+                    // The first 14 bits of 128 bits need to be 0s.
+                    // Staring bitshifting number math:
                     // 127-14 = 113
 
                     // Start a new vec for 111bit significand. This version of
@@ -304,7 +311,7 @@ impl Decimal128 {
     }
 
     pub fn is_zero(&self) -> bool {
-        !self.nan && self.exp == 0 && self.sig == 0
+        !self.nan && self.exp == 0 && self.count_sig_digits() == 0
     }
 
     /// Converts Decimal128 to string. Uses information in
