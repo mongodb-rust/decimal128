@@ -7,6 +7,8 @@ use byteorder::*;
 use std::cmp::Ordering;
 use std::fmt;
 use std::io::Cursor;
+use web_sys::console;
+use wasm_bindgen::prelude::*;
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub struct Exponent {
@@ -242,6 +244,7 @@ impl Decimal128 {
                 // we already used the first digit, so only stringify the
                 // remainder of the significand
                 let remainder_significand = stringify_vec(first_significand.split_off(1));
+                console::log_2(&"first significand".into(), first_significand.clone().into());
                 return format!(
                     "{first_significand}.{remainder_significand}E{exp_sign}{scientific_exponent}",
                     first_significand = first_significand[0],
@@ -262,6 +265,7 @@ impl Decimal128 {
                 let dec_point = self.get_decimal_point_index() as usize;
                 let mut significand_vec = self.significand.as_digit_vec().clone();
                 let remainder_significand = stringify_vec(significand_vec.split_off(dec_point - 1));
+                console::log_2(&"significand_vec".into(), &wasm_bindgen::JsValue::from(significand_vec.clone()));
                 return format!(
                     "{first_significand}.{remainder_significand}",
                     first_significand = significand_vec[0],
